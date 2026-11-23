@@ -45,6 +45,7 @@ final class Runner {
         Map<Integer, LongAdder> statuses = new ConcurrentHashMap<>();
         LongAdder timeouts = new LongAdder();
         LongAdder errors = new LongAdder();
+        Map<String, LongAdder> errorKinds = new ConcurrentHashMap<>();
         LongAdder dropped = new LongAdder();
         AtomicInteger inFlight = new AtomicInteger();
         LatencyHistogram latency = new LatencyHistogram();
@@ -86,6 +87,7 @@ final class Runner {
                         timeouts.increment();
                     } catch (IOException e) {
                         errors.increment();
+                        errorKinds.computeIfAbsent(describe(e), k -> new LongAdder()).increment();
                     } catch (InterruptedException e) {
                         Thread.currentThread().interrupt();
                     } finally {
@@ -99,7 +101,9 @@ final class Runner {
 
             Map<Integer, Long> counts = new ConcurrentHashMap<>();
             statuses.forEach((status, count) -> counts.put(status, count.sum()));
-            return new Result(options, elapsed, counts, timeouts.sum(), errors.sum(), dropped.sum(), latency);
+            Map<String, Long> kinds = new ConcurrentHashMap<>();
+            errorKinds.forEach((kind, count) -> kinds.put(kind, count.sum()));
+            return new Result(options, elapsed, counts, timeouts.sum(), errors.sum(), kinds, dropped.sum(), latency);
         }
     }
 
@@ -110,6 +114,16 @@ final class Runner {
             line.append(String.format(", 보내지 않음=%,d", dropped.sum()));
         }
         out.println(line);
+    }
+
+    /** 연결 실패의 원인을 묶어 센다. 도구 쪽 한계인지 ingest 쪽 거절인지 가리려고 가장 안쪽 원인까지 본다. */
+    static String describe(Throwable e) {
+        Throwable root = e;
+        while (root.getCause() != null && root.getCause() != root) {
+            root = root.getCause();
+        }
+        String message = root.getMessage() == null ? "" : ": " + root.getMessage();
+        return root.getClass().getSimpleName() + message;
     }
 
     private static void waitUntil(long nanoTime) {
