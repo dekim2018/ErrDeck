@@ -6,7 +6,7 @@ Java 25, Spring Boot 4.1, Spring Security 7.1, Vue 3을 쓴다. 저장소는 Pos
 
 ## 지금 상태
 
-03 작업(수집 엔드포인트와 한도)까지 했다. core에 DSN 해석, 봉투 형식, 이벤트 모델이 있다. ingest는 `POST /ingest/{projectId}/envelope` 로 봉투를 받아 키와 출처를 확인하고, Lua 스크립트 하나로 프로젝트 한도 차감, 대기열 길이 확인, Redis 스트림 적재를 한다. api는 PostgreSQL 스키마(Flyway)를 적용한다. worker는 아직 대기열을 읽지 않는다. 진행 상황은 [docs/WORKFLOW.md](docs/WORKFLOW.md)의 5장에 있다.
+04 작업(부하 도구와 폭주 실험 1차)까지 했다. core에 DSN 해석, 봉투 형식, 이벤트 모델이 있다. ingest는 `POST /ingest/{projectId}/envelope` 로 봉투를 받아 키와 출처를 확인하고, Lua 스크립트 하나로 프로젝트 한도 차감, 대기열 길이 확인, Redis 스트림 적재를 한다. api는 PostgreSQL 스키마(Flyway)를 적용한다. loadgen으로 지속 부하와 폭주를 걸 수 있고, 폭주에서 대기열이 상한 20,000에서 멈추는 것을 확인했다([docs/EXPERIMENTS.md](docs/EXPERIMENTS.md)). worker는 아직 대기열을 읽지 않는다. 진행 상황은 [docs/WORKFLOW.md](docs/WORKFLOW.md)의 5장에 있다.
 
 ## 모듈
 
@@ -17,7 +17,7 @@ Java 25, Spring Boot 4.1, Spring Security 7.1, Vue 3을 쓴다. 저장소는 Pos
 | `worker` | 처리 프로세스. 웹 서버는 상태 확인과 지표에만 쓴다 | 8082 |
 | `api` | 조회와 설정 프로세스. PostgreSQL 스키마(Flyway)를 적용한다 | 8081 |
 | `sdk-spring` | Spring Boot Starter SDK | |
-| `loadgen` | 부하와 폭주를 만드는 명령줄 도구 | |
+| `loadgen` | 부하와 폭주를 만드는 명령줄 도구. 실제 봉투 형식으로 정해진 속도를 지켜 보내고 응답 코드별 건수와 p50, p99를 출력한다 | |
 
 `sdk-vue`(Vue SDK)와 `web`(콘솔 화면)은 뒤 작업에서 더한다.
 
@@ -59,6 +59,7 @@ docker compose exec redis redis-cli XLEN errdeck:stream:events
 - [docs/README.md](docs/README.md): 기획과 설계 문서의 목차와 이름 규칙
 - [docs/WORKFLOW.md](docs/WORKFLOW.md): 작업 절차와 작업 목록
 - [docs/adr/](docs/adr/README.md): 결정 기록
+- [docs/EXPERIMENTS.md](docs/EXPERIMENTS.md): 부하, 자원, 장애 실험의 결과
 
 ## 작업 방식
 
