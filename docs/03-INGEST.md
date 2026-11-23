@@ -112,3 +112,15 @@ ingest는 본문의 압축을 풀지 않는다. 압축 해제와 JSON 해석은 
 | ingest가 로컬 디스크에 쓰고 worker가 읽기 | 서버 1대에서는 빠르지만 프로세스가 볼륨을 공유해야 하고, 서버를 나눌 때 다시 만들어야 함 |
 
 측정할 값은 ingest 응답 시간(p50, p99), 응답 코드별 건수, Lua 스크립트 실행 시간, 대기열 길이, 대기열에서 가장 오래된 항목의 나이다.
+
+## 구현하면서 바뀐 점
+
+02 작업에서 봉투 형식을 구현하면서 설계에 없던 것을 정했다.
+
+- **JSON을 core가 직접 읽고 쓴다**: core는 JDK만 쓰기로 했으므로 JSON 라이브러리 대신 봉투에 필요한 만큼의 읽기와 쓰기를 `com.errdeck.core.json` 에 두었다. 악의적인 입력으로 스택이 넘치지 않게 중첩 깊이를 64로 제한한다.
+- **이벤트의 필드 이름**: 설계에는 담을 내용만 있고 이름이 없었다. `event_id`, `timestamp`, `level`, `message`, `environment`, `release`, `user_id`, `trace_id`, `fingerprint`, `count`, `exceptions`, `request`, `tags`, `breadcrumbs` 로 정했다. 기준은 `core/src/testFixtures/resources/envelopes/example.envelope` 이고, SDK와 worker는 이 파일로 형식을 맞춘다.
+- **예외 사슬과 프레임의 순서**: 사슬은 바깥 예외가 먼저, 원인이 뒤에 온다. 프레임은 예외가 난 곳이 먼저 온다. 자바의 `getStackTrace()` 순서와 같아 SDK가 뒤집지 않아도 된다.
+- **count 1은 쓰지 않는다**: 접히지 않은 이벤트가 대부분이라 `count` 가 없으면 1로 읽는다.
+- **모르는 항목 종류는 거부한다**: 머리 줄의 모르는 필드는 무시하지만, event, transaction, client_report 밖의 항목 종류는 봉투 전체를 거부한다. 종류를 늘릴 때는 worker를 먼저 올린다.
+- **트랜잭션 본문은 아직 해석하지 않는다**: transaction 항목은 바이트 그대로 둔다. 내용 모델은 18, 19 작업에서 만든다.
+- **상한은 `EnvelopeLimits` 에 모았다**: 압축된 크기 200KB, 압축을 푼 크기 2MB. 각 프로세스가 설정 속성으로 바꿀 수 있다.

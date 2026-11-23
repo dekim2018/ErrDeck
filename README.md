@@ -6,13 +6,13 @@ Java 25, Spring Boot 4.1, Spring Security 7.1, Vue 3을 쓴다. 저장소는 Pos
 
 ## 지금 상태
 
-01 작업(골격과 문서)까지 했다. 모듈 6개의 빈 골격과 로컬 저장소 compose, CI가 있다. ingest, worker, api는 뜨고 상태 확인에 응답하지만 아직 기능은 없다. 진행 상황은 [docs/WORKFLOW.md](docs/WORKFLOW.md)의 5장에 있다.
+02 작업(봉투 형식과 DSN)까지 했다. core에 DSN 해석, 봉투 쓰기와 읽기, gzip 압축과 해제(출력 2MB 상한), 이벤트와 client_report 모델이 있다. ingest, worker, api는 뜨고 상태 확인에 응답하지만 아직 기능은 없다. 진행 상황은 [docs/WORKFLOW.md](docs/WORKFLOW.md)의 5장에 있다.
 
 ## 모듈
 
 | 모듈 | 내용 | 포트 |
 | --- | --- | --- |
-| `core` | 도메인 모델, 지문 계산, 소스맵 해석, 봉투 형식. 스프링에 의존하지 않는다 | |
+| `core` | 도메인 모델, 지문 계산, 소스맵 해석, 봉투 형식. 스프링에 의존하지 않는다. 예제 봉투(`testFixtures`)를 다른 모듈의 테스트와 함께 쓴다 | |
 | `ingest` | 수집 프로세스. 봉투를 검사해 대기열에 넣는다 | 8080 |
 | `worker` | 처리 프로세스. 웹 서버는 상태 확인과 지표에만 쓴다 | 8082 |
 | `api` | 조회와 설정 프로세스 | 8081 |
