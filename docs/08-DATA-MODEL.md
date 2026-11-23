@@ -134,3 +134,4 @@ Redis의 디스크 기록은 1초마다 하는 방식(AOF everysec)으로 둔다
 
 - **PostgreSQL 스키마는 api가 소유한다**(03 작업): Flyway 스크립트는 `api/src/main/resources/db/migration` 에 두고 api가 뜰 때 적용한다. ingest와 worker는 Flyway를 돌리지 않는다. 그래서 로컬에서는 api를 한 번 띄운 뒤에 ingest와 worker를 띄운다. ingest의 통합 테스트는 같은 스크립트를 테스트 컨테이너에 적용한다.
 - **projects 테이블의 system_id 외래 키**: 03 작업에서는 systems 테이블이 없어 외래 키 없이 만들었다. 06 작업에서 systems를 만들며 건다.
+- **지문 열의 값**(05 작업): `fingerprint FixedString(32)` 와 PostgreSQL의 지문 열에는 SHA-256의 앞 16바이트를 소문자 16진수 32자로 넣는다(6장 끝).
