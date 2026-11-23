@@ -5,6 +5,13 @@ spring:
   threads:
     virtual:
       enabled: true
+  # 로컬 개발용 기본값. 저장소 루트의 docker-compose.yml 과 같다. 배포 환경은 환경 변수로 덮어쓴다.
+  datasource:
+    url: jdbc:postgresql://${ERRDECK_DB_HOST:localhost}:${ERRDECK_DB_PORT:15432}/errdeck
+    username: ${ERRDECK_DB_USER:errdeck}
+    password: ${ERRDECK_DB_PASSWORD:errdeck}
+    hikari:
+      maximum-pool-size: 10
 
 server:
   port: ${ERRDECK_API_PORT:8081}
