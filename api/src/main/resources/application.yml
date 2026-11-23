@@ -21,3 +21,17 @@ management:
     web:
       exposure:
         include: health
+
+errdeck:
+  clickhouse:
+    url: http://${ERRDECK_CLICKHOUSE_HOST:localhost}:${ERRDECK_CLICKHOUSE_PORT:18123}
+    database: errdeck
+    # 스키마를 만드는 관리 사용자. 로컬 개발용 기본값이고 배포 환경은 환경 변수로 덮어쓴다.
+    user: ${ERRDECK_CLICKHOUSE_USER:errdeck}
+    password: ${ERRDECK_CLICKHOUSE_PASSWORD:errdeck}
+    timeout: 10s
+    migrate: true
+    worker-user: errdeck_worker
+    worker-password: ${ERRDECK_CLICKHOUSE_WORKER_PASSWORD:errdeck_worker}
+    api-user: errdeck_api
+    api-password: ${ERRDECK_CLICKHOUSE_API_PASSWORD:errdeck_api}
