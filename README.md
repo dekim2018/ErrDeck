@@ -6,16 +6,16 @@ Java 25, Spring Boot 4.1, Spring Security 7.1, Vue 3을 쓴다. 저장소는 Pos
 
 ## 지금 상태
 
-02 작업(봉투 형식과 DSN)까지 했다. core에 DSN 해석, 봉투 쓰기와 읽기, gzip 압축과 해제(출력 2MB 상한), 이벤트와 client_report 모델이 있다. ingest, worker, api는 뜨고 상태 확인에 응답하지만 아직 기능은 없다. 진행 상황은 [docs/WORKFLOW.md](docs/WORKFLOW.md)의 5장에 있다.
+03 작업(수집 엔드포인트와 한도)까지 했다. core에 DSN 해석, 봉투 형식, 이벤트 모델이 있다. ingest는 `POST /ingest/{projectId}/envelope` 로 봉투를 받아 키와 출처를 확인하고, Lua 스크립트 하나로 프로젝트 한도 차감, 대기열 길이 확인, Redis 스트림 적재를 한다. api는 PostgreSQL 스키마(Flyway)를 적용한다. worker는 아직 대기열을 읽지 않는다. 진행 상황은 [docs/WORKFLOW.md](docs/WORKFLOW.md)의 5장에 있다.
 
 ## 모듈
 
 | 모듈 | 내용 | 포트 |
 | --- | --- | --- |
 | `core` | 도메인 모델, 지문 계산, 소스맵 해석, 봉투 형식. 스프링에 의존하지 않는다. 예제 봉투(`testFixtures`)를 다른 모듈의 테스트와 함께 쓴다 | |
-| `ingest` | 수집 프로세스. 봉투를 검사해 대기열에 넣는다 | 8080 |
+| `ingest` | 수집 프로세스. 크기, DSN 키, 출처를 확인하고 한도 안에서 봉투를 Redis 스트림에 넣는다. 지표는 `/actuator/prometheus` | 8080 |
 | `worker` | 처리 프로세스. 웹 서버는 상태 확인과 지표에만 쓴다 | 8082 |
-| `api` | 조회와 설정 프로세스 | 8081 |
+| `api` | 조회와 설정 프로세스. PostgreSQL 스키마(Flyway)를 적용한다 | 8081 |
 | `sdk-spring` | Spring Boot Starter SDK | |
 | `loadgen` | 부하와 폭주를 만드는 명령줄 도구 | |
 
@@ -36,11 +36,22 @@ docker compose up -d
 docker compose ps
 ```
 
-프로세스를 띄운다. 포트는 `ERRDECK_INGEST_PORT`, `ERRDECK_API_PORT`, `ERRDECK_WORKER_PORT` 로 바꿀 수 있다.
+프로세스를 띄운다. PostgreSQL 스키마는 api가 적용하므로 api를 먼저 띄운다. 포트는 `ERRDECK_INGEST_PORT`, `ERRDECK_API_PORT`, `ERRDECK_WORKER_PORT` 로 바꿀 수 있다.
 
 ```bash
+./gradlew :api:bootRun
 ./gradlew :ingest:bootRun
 curl -s http://localhost:8080/actuator/health
+```
+
+봉투를 보내 본다. 프로젝트와 키는 아직 화면이 없으므로 SQL로 만든다.
+
+```bash
+docker compose exec postgres psql -U errdeck -c "insert into projects (system_id, slug, platform) values (1, 'local', 'spring')"
+docker compose exec postgres psql -U errdeck -c "insert into project_keys (project_id, public_key) values (1, 'localkey')"
+gzip -c core/src/testFixtures/resources/envelopes/example.envelope > /tmp/example.envelope.gz
+curl -i -X POST -H 'X-ErrDeck-Key: localkey' --data-binary @/tmp/example.envelope.gz http://localhost:8080/ingest/1/envelope
+docker compose exec redis redis-cli XLEN errdeck:stream:events
 ```
 
 ## 문서
