@@ -135,3 +135,9 @@ Redis의 디스크 기록은 1초마다 하는 방식(AOF everysec)으로 둔다
 - **PostgreSQL 스키마는 api가 소유한다**(03 작업): Flyway 스크립트는 `api/src/main/resources/db/migration` 에 두고 api가 뜰 때 적용한다. ingest와 worker는 Flyway를 돌리지 않는다. 그래서 로컬에서는 api를 한 번 띄운 뒤에 ingest와 worker를 띄운다. ingest의 통합 테스트는 같은 스크립트를 테스트 컨테이너에 적용한다.
 - **projects 테이블의 system_id 외래 키**: 03 작업에서는 systems 테이블이 없어 외래 키 없이 만들었다. 06 작업에서 systems를 만들며 건다.
 - **지문 열의 값**(05 작업): `fingerprint FixedString(32)` 와 PostgreSQL의 지문 열에는 SHA-256의 앞 16바이트를 소문자 16진수 32자로 넣는다(6장 끝).
+- **ClickHouse 스키마도 api가 적용한다**(06 작업): 번호 붙인 SQL 파일은 `api/src/main/resources/clickhouse` 에 두고, api가 뜰 때 실행기가 순서대로 실행해 `schema_migrations` 에 번호를 남긴다. 관리 사용자(`errdeck`)로 실행하고, worker와 api는 각자의 사용자(`errdeck_worker`, `errdeck_api`)를 쓴다. 비밀번호는 SQL 파일에 두지 않고 설정(`ERRDECK_CLICKHOUSE_WORKER_PASSWORD`, `ERRDECK_CLICKHOUSE_API_PASSWORD`)에서 채운다.
+- **조회 상한의 값**: api 사용자는 읽기 전용(`readonly = 2`)이고 쿼리별 실행 시간 10초, 메모리 512MB, 스레드 2개다. worker 사용자는 실행 시간 10초, 메모리 512MB다. 둘 다 ClickHouse 메모리 상한 2,048MB(14.7) 안에 들도록 잡은 처음 값이다. 서버 전체 메모리 상한과 캐시 크기는 컨테이너 상한을 거는 16 작업에서 정한다.
+- **issue_stats_1m 의 열 타입**: `times` 는 `SimpleAggregateFunction(sum, UInt64)`, `users` 는 `AggregateFunction(uniq, UInt64)` 다. 구체화 뷰는 `count` 를 UInt64로 바꿔 더한다. 1년 보존이라 파티션은 월 단위로 둔다.
+- **transactions 의 스팬 열**: 스팬은 같은 행의 배열 열 7개(`span_ids`, `span_parent_ids`, `span_ops`, `span_descriptions`, `span_starts_ms`, `span_durations_ms`, `span_repeats`)로 둔다. 계측을 만드는 18, 19 작업에서 다시 맞춘다.
+- **PostgreSQL 테이블에서 정한 것**: 이슈 상태는 `unresolved`, `resolved`, `ignored`, `regressed`. 무시 조건은 `ignored_until` 과 `ignored_until_count`. 알림 규칙의 기간은 `window` 가 예약어라 `window_minutes` 로 쓴다. 모니터마다 열린 장애 기록은 부분 유일 색인으로 하나만 둔다.
+
