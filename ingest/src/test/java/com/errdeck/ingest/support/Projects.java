@@ -26,11 +26,15 @@ public final class Projects {
     }
 
     public Created create(String platform, int rateLimitPerMin, List<String> allowedOrigins, Instant revokedAt) {
+        long systemId = jdbc.sql("INSERT INTO systems (name) VALUES (?) RETURNING id")
+                .param("s-" + UUID.randomUUID())
+                .query(Long.class)
+                .single();
         long projectId = jdbc.sql("""
                         INSERT INTO projects (system_id, slug, platform, rate_limit_per_min, allowed_origins)
-                        VALUES (1, ?, ?, ?, ?::text[]) RETURNING id
+                        VALUES (?, ?, ?, ?, ?::text[]) RETURNING id
                         """)
-                .params("p-" + UUID.randomUUID(), platform, rateLimitPerMin, "{" + String.join(",", allowedOrigins) + "}")
+                .params(systemId, "p-" + UUID.randomUUID(), platform, rateLimitPerMin, "{" + String.join(",", allowedOrigins) + "}")
                 .query(Long.class)
                 .single();
         String key = UUID.randomUUID().toString().replace("-", "");
