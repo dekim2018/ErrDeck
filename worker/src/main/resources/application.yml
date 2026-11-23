@@ -1,0 +1,12 @@
+spring:
+  application:
+    name: errdeck-worker
+
+server:
+  port: ${ERRDECK_WORKER_PORT:8082}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
