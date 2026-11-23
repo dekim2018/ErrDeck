@@ -188,7 +188,9 @@ class IngestEndpointTest extends TestInfra {
         int requests = 200;
 
         List<Integer> statuses = new ArrayList<>();
-        try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
+        // 연결을 한꺼번에 200개 열면 맥의 연결 대기열(somaxconn 128, Tomcat accept-count 100)이 넘쳐 연결 단계에서 끊긴다.
+        // 이 테스트가 보려는 것은 Lua 스크립트의 원자성이므로 동시 연결은 32개로 두고 200건을 겹쳐 보낸다.
+        try (ExecutorService executor = Executors.newFixedThreadPool(32, Thread.ofVirtual().factory())) {
             List<Callable<Integer>> tasks = new ArrayList<>();
             for (int i = 0; i < requests; i++) {
                 tasks.add(() -> send(post(project.projectId(), "").header("X-ErrDeck-Key", project.publicKey())).statusCode());
