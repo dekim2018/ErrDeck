@@ -1,6 +1,16 @@
 spring:
   application:
     name: errdeck-worker
+  data:
+    redis:
+      host: ${ERRDECK_REDIS_HOST:localhost}
+      port: ${ERRDECK_REDIS_PORT:16379}
+      # 읽기는 최대 1초 기다리는 블로킹 호출이므로 그보다 길게 둔다.
+      timeout: 3s
+      connect-timeout: 1s
+  lifecycle:
+    # 읽기를 멈추고 처리 중인 묶음을 쓰고 확인 처리하는 데 주는 시간(17.6)
+    timeout-per-shutdown-phase: 30s
 
 server:
   port: ${ERRDECK_WORKER_PORT:8082}
@@ -9,4 +19,33 @@ management:
   endpoints:
     web:
       exposure:
-        include: health
+        include: health,prometheus
+  metrics:
+    distribution:
+      percentiles-histogram:
+        errdeck.e2e.latency: true
+
+# 값은 14.3, 14.5, 10.4, 14.9 를 따른다. 17 작업의 자원 실험으로 다시 맞춘다.
+errdeck:
+  worker:
+    consumer-group: errdeck-workers
+    read-count: 500
+    read-block: 1s
+    handoff-capacity: 2000
+    compute-threads: 2
+    events-per-transaction: 3
+    write-queue-capacity: 10000
+    batch-max-rows: 5000
+    batch-max-wait: 1s
+    claim-interval: 30s
+    claim-min-idle: 60s
+    retry-max-backoff: 10s
+    shutdown-timeout: 30s
+    # SDK 가 in_app 을 정하지 않은 프레임을 앱 프레임으로 볼 패키지(6.3)
+    in-app-packages: []
+  clickhouse:
+    url: http://${ERRDECK_CLICKHOUSE_HOST:localhost}:${ERRDECK_CLICKHOUSE_PORT:18123}
+    database: errdeck
+    user: errdeck_worker
+    password: ${ERRDECK_CLICKHOUSE_WORKER_PASSWORD:errdeck_worker}
+    timeout: 10s
