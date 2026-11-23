@@ -1,0 +1,16 @@
+spring:
+  application:
+    name: errdeck-ingest
+  # 요청을 받아 저장소 응답을 기다리는 일이 대부분이라 가상 스레드를 켠다(adr/0009).
+  threads:
+    virtual:
+      enabled: true
+
+server:
+  port: ${ERRDECK_INGEST_PORT:8080}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
