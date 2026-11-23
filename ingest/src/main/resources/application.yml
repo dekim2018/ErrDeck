@@ -5,6 +5,26 @@ spring:
   threads:
     virtual:
       enabled: true
+  # 로컬 개발용 기본값. 저장소 루트의 docker-compose.yml 과 같다. 배포 환경은 환경 변수로 덮어쓴다.
+  datasource:
+    url: jdbc:postgresql://${ERRDECK_DB_HOST:localhost}:${ERRDECK_DB_PORT:15432}/errdeck
+    username: ${ERRDECK_DB_USER:errdeck}
+    password: ${ERRDECK_DB_PASSWORD:errdeck}
+    hikari:
+      # 키 캐시가 비었을 때만 조회한다(14.6).
+      maximum-pool-size: 2
+      # 밀리초 단위다.
+      connection-timeout: 1000
+  jdbc:
+    template:
+      query-timeout: 1s
+  data:
+    redis:
+      host: ${ERRDECK_REDIS_HOST:localhost}
+      port: ${ERRDECK_REDIS_PORT:16379}
+      # Redis 가 느리면 기다리지 않고 503 을 응답한다(14.9).
+      timeout: 200ms
+      connect-timeout: 200ms
 
 server:
   port: ${ERRDECK_INGEST_PORT:8080}
@@ -13,4 +33,22 @@ management:
   endpoints:
     web:
       exposure:
-        include: health
+        include: health,prometheus
+
+# 값은 5.3, 5.4, 5.5, 14.4 를 따른다. 18장의 실험 결과로 다시 맞춘다.
+errdeck:
+  ingest:
+    max-envelope-size: 200KB
+    key-cache:
+      ttl: 30s
+      max-size: 10000
+    rate-limit:
+      burst: 1000
+      bucket-ttl: 2m
+    queue:
+      events-max-length: 20000
+      tx-max-length: 20000
+      full-retry-after: 5s
+      metrics-interval: 5s
+    redis:
+      max-in-flight: 256

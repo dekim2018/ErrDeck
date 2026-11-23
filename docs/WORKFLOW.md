@@ -174,6 +174,9 @@ PR 주소, 확인한 것, 확인하지 못한 것, 사용자가 정해야 할 �
 | 테스트 | `spring-boot-starter-test`, `spring-boot-testcontainers`, `org.testcontainers:testcontainers-junit-jupiter`, `org.testcontainers:testcontainers-postgresql`, `org.junit.platform:junit-platform-launcher` |
 | 순수 Java 모듈의 테스트 | `org.junit:junit-bom:5.13.4` 와 `org.junit.jupiter:junit-jupiter` |
 | JSON | Jackson 3 (`tools.jackson`). Spring Boot 4.1.1이 관리하는 버전을 쓴다 |
+| 로컬 캐시 | `com.github.ben-manes.caffeine:caffeine`. Spring Boot가 버전을 관리한다 |
+| 지표 | `io.micrometer:micrometer-registry-prometheus`. Spring Boot가 버전을 관리한다 |
+| 테스트의 스키마 적용 | `org.flywaydb:flyway-core`, `org.flywaydb:flyway-database-postgresql`. ingest 테스트가 api의 Flyway 스크립트를 적용할 때 쓴다 |
 
 위 표에 없는 의존성(ClickHouse 클라이언트, Caffeine, 프로메테우스 등록기 등)은 처음 쓰는 작업에서 Spring Boot가 버전을 관리하는지 확인하고, 관리하지 않으면 버전을 명시한다. 추가한 의존성은 이 표에 한 줄 더한다.
 
@@ -309,6 +312,7 @@ sleep 20 && curl -s http://localhost:8080/actuator/health; kill %1
     - 에러 큐 우선, 에러 3건마다 트랜잭션 1건
     - 묶음 쓰기: 1초 또는 5,000행. 쓰기에 성공한 뒤에만 XACK
     - 미확인 항목 이어받기(XAUTOCLAIM)
+    - 확인 처리한 항목은 XDEL로 지운다. ingest가 XLEN으로 대기열 길이 상한을 확인하기 때문이다(5장 끝)
     - 종료 절차: 읽기를 멈추고 처리 중인 묶음을 쓰고 확인 처리한 뒤 끝낸다. 제한 30초
     - 지표: `errdeck_worker_stage_seconds`, `errdeck_clickhouse_batch_rows`, `errdeck_clickhouse_flush_seconds`, `errdeck_e2e_latency_seconds`
     - 이 작업에서는 이벤트를 지문만 계산해 `events` 에 넣는다. 이슈 연결은 08 작업
@@ -585,7 +589,7 @@ sleep 20 && curl -s http://localhost:8080/actuator/health; kill %1
 
 - [x] 01 골격과 문서
 - [x] 02 봉투 형식과 DSN
-- [ ] 03 수집 엔드포인트와 한도
+- [x] 03 수집 엔드포인트와 한도
 - [ ] 04 부하 도구와 폭주 실험 1차
 - [ ] 05 정규화와 지문 규칙
 - [ ] 06 저장소 스키마

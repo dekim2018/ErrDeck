@@ -129,3 +129,8 @@ Redis의 디스크 기록은 1초마다 하는 방식(AOF everysec)으로 둔다
 ## 10.7 측정할 값
 
 디스크 사용량은 미리 계산하지 않고 잰다. 하루 이벤트 수, 이벤트당 압축 후 크기, 파티션별 크기를 18장의 실험에서 기록해 30일 치 필요 용량을 구한다. 그 밖에 묶음 쓰기 시간, 활성 파트 수, 쿼리 시간 분포를 본다.
+
+## 구현하면서 바뀐 점
+
+- **PostgreSQL 스키마는 api가 소유한다**(03 작업): Flyway 스크립트는 `api/src/main/resources/db/migration` 에 두고 api가 뜰 때 적용한다. ingest와 worker는 Flyway를 돌리지 않는다. 그래서 로컬에서는 api를 한 번 띄운 뒤에 ingest와 worker를 띄운다. ingest의 통합 테스트는 같은 스크립트를 테스트 컨테이너에 적용한다.
+- **projects 테이블의 system_id 외래 키**: 03 작업에서는 systems 테이블이 없어 외래 키 없이 만들었다. 06 작업에서 systems를 만들며 건다.
