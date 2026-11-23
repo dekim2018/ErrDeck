@@ -1,0 +1,63 @@
+# 로컬 개발용 저장소. 포트는 팬파라이브, CoPage와 함께 띄워도 겹치지 않게 잡았다(WORKFLOW.md 3장).
+# 프로세스 컨테이너, CPU와 메모리 상한, obs와 demo 프로필은 16 작업에서 더한다.
+name: errdeck
+
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: errdeck
+      POSTGRES_USER: errdeck
+      POSTGRES_PASSWORD: errdeck
+    ports:
+      - "${ERRDECK_DB_PORT:-15432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U errdeck -d errdeck"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7
+    # 대기열을 담으므로 재시작 후에도 남게 AOF를 켜고, 메모리가 차면 지우지 않고 쓰기를 거부하게 한다(adr/0002).
+    command: >-
+      redis-server --appendonly yes --appendfsync everysec
+      --maxmemory 256mb --maxmemory-policy noeviction
+    ports:
+      - "${ERRDECK_REDIS_PORT:-16379}:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  clickhouse:
+    image: clickhouse:26.3
+    environment:
+      CLICKHOUSE_DB: errdeck
+      CLICKHOUSE_USER: errdeck
+      CLICKHOUSE_PASSWORD: errdeck
+      # 06 작업에서 worker용, api용 사용자를 SQL로 만들 수 있게 한다.
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+    ports:
+      - "${ERRDECK_CLICKHOUSE_PORT:-18123}:8123"
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    healthcheck:
+      test: ["CMD-SHELL", "clickhouse-client --user errdeck --password errdeck --query 'SELECT 1'"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  postgres-data:
+  redis-data:
+  clickhouse-data:
