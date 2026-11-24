@@ -598,7 +598,7 @@ sleep 20 && curl -s http://localhost:8080/actuator/health; kill %1
 - [x] 09 Starter SDK
 - [x] 10 데모 앱
 - [x] 11 로그인과 권한
-- [ ] 12 콘솔 뼈대와 이슈 화면
+- [x] 12 콘솔 뼈대와 이슈 화면
 - [ ] 13 소스맵 해석과 캐시
 - [ ] 14 Vue SDK
 - [ ] 15 릴리스와 소스맵 업로드, 재발 판정
