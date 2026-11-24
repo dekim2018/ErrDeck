@@ -1,5 +1,10 @@
 # 로컬 개발용 저장소. 포트는 팬파라이브, CoPage와 함께 띄워도 겹치지 않게 잡았다(WORKFLOW.md 3장).
-# 프로세스 컨테이너, CPU와 메모리 상한, obs와 demo 프로필은 16 작업에서 더한다.
+# 프로세스 컨테이너, CPU와 메모리 상한, obs 프로필은 16 작업에서 더한다.
+# demo 프로필(17.3): 데모 앱과 loadgen. jar 를 먼저 만들고 띄운다.
+#   ./gradlew :demo-api:bootJar :loadgen:installDist
+#   docker compose exec -T postgres psql -U errdeck < scripts/demo/seed.sql
+#   docker compose --profile demo up -d demo-api
+#   docker compose --profile demo run --rm loadgen http --url=http://demo-api:8090/demo/ok --rate=200 --duration=30s
 name: errdeck
 
 services:
@@ -56,6 +61,29 @@ services:
       interval: 5s
       timeout: 5s
       retries: 20
+
+  demo-api:
+    profiles: [demo]
+    build:
+      context: .
+      dockerfile: demo-api/Dockerfile
+    environment:
+      # ingest 는 16 작업 전까지 호스트에서 띄운다.
+      DEMO_ERRDECK_DSN: ${DEMO_ERRDECK_DSN:-http://demoapikey@host.docker.internal:8080/9001}
+      DEMO_ERRDECK_ENABLED: ${DEMO_ERRDECK_ENABLED:-true}
+      DEMO_ENVIRONMENT: compose
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "${DEMO_PORT:-8090}:8090"
+
+  loadgen:
+    profiles: [demo]
+    build:
+      context: .
+      dockerfile: loadgen/docker/Dockerfile
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
 volumes:
   postgres-data:
