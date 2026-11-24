@@ -1,15 +1,56 @@
-# 로컬 개발용 저장소. 포트는 팬파라이브, CoPage와 함께 띄워도 겹치지 않게 잡았다(WORKFLOW.md 3장).
-# 프로세스 컨테이너, CPU와 메모리 상한, obs 프로필은 16 작업에서 더한다.
-# demo 프로필(17.3): 데모 앱과 loadgen. jar 를 먼저 만들고 띄운다.
+# 로컬 개발과 실험용 구성. 포트는 팬파라이브, CoPage와 함께 띄워도 겹치지 않게 잡았다(WORKFLOW.md 3장).
+#
+# 프로필
+#   (없음)  저장소 3개만. 호스트에서 ./gradlew bootRun 으로 프로세스를 띄울 때
+#   core    ingest, worker, api 컨테이너
+#   obs     Prometheus, Grafana, Alertmanager, exporter 4종(13.1)
+#   demo    데모 앱과 loadgen(17.3). jar 를 먼저 만들고 띄운다.
+#
+#   docker compose --profile core --profile obs up -d --build
+#
+# demo 프로필
 #   ./gradlew :demo-api:bootJar :loadgen:installDist
 #   docker compose exec -T postgres psql -U errdeck < scripts/demo/seed.sql
 #   docker compose --profile demo up -d demo-api
 #   docker compose --profile demo run --rm loadgen http --url=http://demo-api:8090/demo/ok --rate=200 --duration=30s
+#
+# CPU 상한은 14.1, 메모리 상한은 14.7, JVM 옵션은 14.2 와 14.8 을 따른다. 값을 바꾸면 그 표도 고친다.
+# Go 로 만든 관측 도구도 JVM 처럼 서버의 코어 수만큼 스레드를 돌리다 CPU 상한에 걸리므로 GOMAXPROCS 를 1 로 준다.
 name: errdeck
+
+x-logging: &logging
+  # 로그 수집 도구 없이 파일 크기와 개수로 회전시킨다(13.7).
+  driver: json-file
+  options:
+    max-size: 10m
+    max-file: "3"
+
+x-app-env: &app-env
+  ERRDECK_DB_HOST: postgres
+  ERRDECK_DB_PORT: 5432
+  ERRDECK_REDIS_HOST: redis
+  ERRDECK_REDIS_PORT: 6379
+  ERRDECK_CLICKHOUSE_HOST: clickhouse
+  ERRDECK_CLICKHOUSE_PORT: 8123
+  ERRDECK_FILES_DIR: /data/artifacts
+  # 지표는 서비스 포트와 나눈 관리 포트로만 낸다. 관리 포트는 호스트에 열지 않는다(13.2).
+  MANAGEMENT_SERVER_PORT: 8091
+  # glibc 가 스레드마다 메모리 구역을 만들어 힙 밖 사용이 커지는 것을 줄인다(14.7).
+  MALLOC_ARENA_MAX: 2
+
+x-app-health: &app-health
+  # JRE 이미지에 curl 이 없어 bash 의 /dev/tcp 로 상태 확인을 부른다.
+  test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8091 && printf 'GET /actuator/health HTTP/1.0\\r\\n\\r\\n' >&3 && grep -q UP <&3"]
+  interval: 5s
+  timeout: 3s
+  retries: 30
+  start_period: 10s
 
 services:
   postgres:
     image: postgres:17
+    # 연결 합계 16 + 관측 도구와 수동 접속의 여유(14.6). shared_buffers 는 14.7.
+    command: postgres -c max_connections=30 -c shared_buffers=128MB
     environment:
       POSTGRES_DB: errdeck
       POSTGRES_USER: errdeck
@@ -18,6 +59,10 @@ services:
       - "${ERRDECK_DB_PORT:-15432}:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
+    cpus: 1.0
+    mem_limit: 512m
+    logging: *logging
+    restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U errdeck -d errdeck"]
       interval: 5s
@@ -34,6 +79,10 @@ services:
       - "${ERRDECK_REDIS_PORT:-16379}:6379"
     volumes:
       - redis-data:/data
+    cpus: 1.0
+    mem_limit: 320m
+    logging: *logging
+    restart: unless-stopped
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -52,15 +101,239 @@ services:
       - "${ERRDECK_CLICKHOUSE_PORT:-18123}:8123"
     volumes:
       - clickhouse-data:/var/lib/clickhouse
+      - ./deploy/clickhouse/prometheus.xml:/etc/clickhouse-server/config.d/prometheus.xml:ro
+      - ./deploy/clickhouse/resources.xml:/etc/clickhouse-server/config.d/resources.xml:ro
+    cpus: 2.0
+    mem_limit: 2048m
+    logging: *logging
     ulimits:
       nofile:
         soft: 262144
         hard: 262144
+    restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "clickhouse-client --user errdeck --password errdeck --query 'SELECT 1'"]
       interval: 5s
       timeout: 5s
       retries: 20
+
+  # ---------------------------------------------------------------- core
+
+  api:
+    profiles: [core]
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+    environment:
+      <<: *app-env
+      # 코어 1개, 힙 256MB, 응답 시간이 목표라 G1(14.8).
+      JAVA_OPTS: >-
+        -XX:ActiveProcessorCount=1 -Xms256m -Xmx256m -XX:+UseG1GC -XX:+ExitOnOutOfMemoryError
+      ERRDECK_INTERNAL_SECRET: ${ERRDECK_INTERNAL_SECRET:-local-internal-secret}
+      ERRDECK_PUBLIC_INGEST_URL: http://localhost:${ERRDECK_INGEST_HOST_PORT:-18080}
+      ERRDECK_CONSOLE_ORIGINS: http://localhost:5173
+      ERRDECK_GRAFANA_URL: http://localhost:${ERRDECK_GRAFANA_PORT:-13000}
+    ports:
+      - "${ERRDECK_API_HOST_PORT:-18081}:8081"
+    volumes:
+      - artifacts:/data/artifacts
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+      clickhouse: {condition: service_healthy}
+    cpus: 1.0
+    mem_limit: 512m
+    logging: *logging
+    healthcheck: *app-health
+    restart: unless-stopped
+
+  ingest:
+    profiles: [core]
+    build:
+      context: .
+      dockerfile: ingest/Dockerfile
+    environment:
+      <<: *app-env
+      # 코어 1개, 힙 160MB. 힙이 작아 Serial 의 멈춤이 짧고 GC 스레드가 요청과 코어를 다투지 않는다(14.8).
+      JAVA_OPTS: >-
+        -XX:ActiveProcessorCount=1 -Xms160m -Xmx160m -XX:+UseSerialGC -XX:+ExitOnOutOfMemoryError
+    ports:
+      - "${ERRDECK_INGEST_HOST_PORT:-18080}:8080"
+    depends_on:
+      # 키 테이블은 api 의 Flyway 가 만든다.
+      api: {condition: service_healthy}
+    cpus: 1.0
+    mem_limit: 384m
+    logging: *logging
+    healthcheck: *app-health
+    restart: unless-stopped
+
+  worker:
+    profiles: [core]
+    build:
+      context: .
+      dockerfile: worker/Dockerfile
+    environment:
+      <<: *app-env
+      # 코어 2개(계산 풀 2와 같음), 힙 448MB 중 소스맵 캐시 128MB. 처리량이 목표라 Parallel.
+      # 작은 객체가 많은 힙이라 압축 객체 헤더를 켠다(14.8).
+      JAVA_OPTS: >-
+        -XX:ActiveProcessorCount=2 -Xms448m -Xmx448m -XX:+UseParallelGC -XX:+UseCompactObjectHeaders
+        -XX:+ExitOnOutOfMemoryError
+    volumes:
+      - artifacts:/data/artifacts
+    depends_on:
+      api: {condition: service_healthy}
+    cpus: 2.0
+    mem_limit: 768m
+    logging: *logging
+    healthcheck: *app-health
+    # 받은 신호에서 처리 중인 묶음을 쓰고 확인 처리할 시간(17.6, lifecycle 30s 보다 길게).
+    stop_grace_period: 40s
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------- obs
+
+  prometheus:
+    profiles: [obs]
+    image: prom/prometheus:v3.16.0
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      # 15일 또는 2GB 중 먼저 닿는 쪽(13.1)
+      - --storage.tsdb.retention.time=15d
+      - --storage.tsdb.retention.size=2GB
+      # 다른 서버의 에이전트가 밀어 보내는 지표를 받는다(13.3, adr/0012).
+      - --web.enable-remote-write-receiver
+      - --web.enable-lifecycle
+    ports:
+      - "${ERRDECK_PROMETHEUS_PORT:-19090}:9090"
+    volumes:
+      - ./deploy/prometheus:/etc/prometheus:ro
+      - prometheus-data:/prometheus
+    environment:
+      GOMAXPROCS: 1
+    cpus: 0.5
+    mem_limit: 512m
+    logging: *logging
+    restart: unless-stopped
+
+  alertmanager:
+    profiles: [obs]
+    image: prom/alertmanager:v0.35.0
+    # 설정 파일은 환경 변수를 펼치지 않으므로, api 와 나눈 공유 비밀을 파일로 써 두고 설정이 그 파일을 읽는다.
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        printf '%s' "$$ERRDECK_INTERNAL_SECRET" > /alertmanager/internal-secret &&
+        exec /bin/alertmanager --config.file=/etc/alertmanager/alertmanager.yml --storage.path=/alertmanager
+    environment:
+      GOMAXPROCS: 1
+      ERRDECK_INTERNAL_SECRET: ${ERRDECK_INTERNAL_SECRET:-local-internal-secret}
+    ports:
+      - "${ERRDECK_ALERTMANAGER_PORT:-19093}:9093"
+    volumes:
+      - ./deploy/alertmanager:/etc/alertmanager:ro
+      - alertmanager-data:/alertmanager
+    cpus: 0.25
+    mem_limit: 64m
+    logging: *logging
+    restart: unless-stopped
+
+  grafana:
+    profiles: [obs]
+    image: grafana/grafana:13.2.6
+    environment:
+      GOMAXPROCS: 1
+      # 로컬 전용. 배포 환경은 25 작업에서 관리자 비밀번호를 환경 변수로 바꾼다.
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${ERRDECK_GRAFANA_PASSWORD:-admin}
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/overview.json
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_PLUGINS_PREINSTALL_DISABLED: "true"
+    ports:
+      - "${ERRDECK_GRAFANA_PORT:-13000}:3000"
+    volumes:
+      - ./deploy/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./deploy/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    cpus: 0.5
+    mem_limit: 192m
+    logging: *logging
+    restart: unless-stopped
+
+  node-exporter:
+    profiles: [obs]
+    image: prom/node-exporter:v1.13.1
+    command:
+      - --path.rootfs=/host
+    volumes:
+      - /:/host:ro
+    pid: host
+    environment:
+      GOMAXPROCS: 1
+    cpus: 0.25
+    mem_limit: 32m
+    logging: *logging
+    restart: unless-stopped
+
+  cadvisor:
+    profiles: [obs]
+    image: ghcr.io/google/cadvisor:v0.61.1
+    command:
+      # 수집할 지표를 줄여 메모리 상한 128MB 안에 둔다.
+      - --docker_only=true
+      - --housekeeping_interval=15s
+      - --store_container_labels=false
+      - --whitelisted_container_labels=com.docker.compose.project,com.docker.compose.service
+      - --disable_metrics=disk,diskIO,tcp,udp,percpu,sched,process,hugetlb,referenced_memory,cpu_topology,resctrl,advtcp,memory_numa
+    privileged: true
+    devices:
+      - /dev/kmsg
+    volumes:
+      - /:/rootfs:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      # Docker 29 는 containerd 이미지 저장소를 써서 cAdvisor 가 containerd 에도 물어야 컨테이너를 찾는다.
+      - /run/containerd/containerd.sock:/run/containerd/containerd.sock:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+    environment:
+      GOMAXPROCS: 1
+    cpus: 0.5
+    mem_limit: 128m
+    logging: *logging
+    restart: unless-stopped
+
+  postgres-exporter:
+    profiles: [obs]
+    image: prometheuscommunity/postgres-exporter:v0.21.1
+    environment:
+      GOMAXPROCS: 1
+      DATA_SOURCE_NAME: postgresql://errdeck:errdeck@postgres:5432/errdeck?sslmode=disable
+    depends_on:
+      postgres: {condition: service_healthy}
+    cpus: 0.25
+    mem_limit: 64m
+    logging: *logging
+    restart: unless-stopped
+
+  redis-exporter:
+    profiles: [obs]
+    image: oliver006/redis_exporter:v1.99.0
+    environment:
+      GOMAXPROCS: 1
+      REDIS_ADDR: redis://redis:6379
+    depends_on:
+      redis: {condition: service_healthy}
+    cpus: 0.25
+    mem_limit: 32m
+    logging: *logging
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------- demo
 
   demo-api:
     profiles: [demo]
@@ -68,7 +341,7 @@ services:
       context: .
       dockerfile: demo-api/Dockerfile
     environment:
-      # ingest 는 16 작업 전까지 호스트에서 띄운다.
+      # core 프로필을 함께 띄우면 DEMO_ERRDECK_DSN=http://demoapikey@ingest:8080/9001 로 같은 네트워크의 ingest 에 보낸다.
       DEMO_ERRDECK_DSN: ${DEMO_ERRDECK_DSN:-http://demoapikey@host.docker.internal:8080/9001}
       DEMO_ERRDECK_ENABLED: ${DEMO_ERRDECK_ENABLED:-true}
       DEMO_ENVIRONMENT: compose
@@ -76,6 +349,7 @@ services:
       - "host.docker.internal:host-gateway"
     ports:
       - "${DEMO_PORT:-8090}:8090"
+    logging: *logging
 
   loadgen:
     profiles: [demo]
@@ -89,3 +363,8 @@ volumes:
   postgres-data:
   redis-data:
   clickhouse-data:
+  # api 가 쓰고 worker 가 읽는 소스맵 볼륨(7.2)
+  artifacts:
+  prometheus-data:
+  alertmanager-data:
+  grafana-data:
