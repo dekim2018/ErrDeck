@@ -172,11 +172,13 @@ public class JdbcWorkspaceRepository implements WorkspaceRepository {
     }
 
     @Override
-    public boolean updateIssueStatus(long issueId, String status, String resolvedInRelease, Instant ignoredUntil) {
+    public boolean updateIssueStatus(long issueId, String status, String resolvedInRelease, Instant ignoredUntil, Long ignoredUntilCount) {
         return jdbc.sql("""
-                        UPDATE issues SET status = ?, resolved_in_release = ?, ignored_until = ?, updated_at = now() WHERE id = ?
+                        UPDATE issues SET status = ?, resolved_in_release = ?, ignored_until = ?, ignored_until_count = ?, ignored_count = 0,
+                            updated_at = now()
+                        WHERE id = ?
                         """)
-                .params(status, resolvedInRelease, ignoredUntil == null ? null : Timestamp.from(ignoredUntil), issueId)
+                .params(status, resolvedInRelease, ignoredUntil == null ? null : Timestamp.from(ignoredUntil), ignoredUntilCount, issueId)
                 .update() > 0;
     }
 
