@@ -66,7 +66,7 @@ Vue 프로젝트에는 서버 지표가 없다. 카드에는 이 서비스가 �
 그라파나 대시보드는 서비스 이름을 변수로 받게 만든다. 링크에 변수와 시간 범위를 실어 보낸다.
 
 ```
-/grafana/d/{대시보드ID}/jvm?var-service=fanpa-broadcast&from={시작 밀리초}&to={끝 밀리초}
+/grafana/d/{대시보드ID}?var-job=fanpa-broadcast&from={시작 밀리초}&to={끝 밀리초}
 ```
 
 | 링크가 있는 곳 | 넘기는 값 |

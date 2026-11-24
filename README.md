@@ -6,7 +6,7 @@ Java 25, Spring Boot 4.1, Spring Security 7.1, Vue 3을 쓴다. 저장소는 Pos
 
 ## 지금 상태
 
-16 작업(지표, 대시보드, 경보)까지 했다. core에 DSN 해석, 봉투 형식, 이벤트 모델, 지문 규칙 9개(값을 지운 메시지, 프록시와 람다 이름 정리, 앱 프레임 판정), 소스맵 해석기와 바이트 상한 캐시가 있다. ingest는 `POST /ingest/{projectId}/envelope` 로 봉투를 받아 키와 출처를 확인하고, Lua 스크립트 하나로 프로젝트 한도 차감, 대기열 길이 확인, Redis 스트림 적재를 한다. api는 콘솔 사용자의 가입, 로그인, 토큰 재발급과 시스템 단위 권한(VIEWER, MEMBER, ADMIN, OWNER)을 맡고, 시스템, 구성원, 프로젝트, DSN 키를 관리하는 API를 둔다. 뜰 때 PostgreSQL 스키마(Flyway, 테이블 16개)와 ClickHouse 스키마(테이블 5개, 분 단위 집계 뷰, worker와 api용 사용자)를 적용한다. loadgen으로 지속 부하와 폭주를 걸 수 있고, 폭주에서 대기열이 상한 20,000에서 멈추는 것을 확인했다([docs/EXPERIMENTS.md](docs/EXPERIMENTS.md)). worker는 대기열을 읽어 이벤트의 지문을 계산하고, 지문으로 이슈를 찾거나 만들고, 받은 이벤트 전부의 건수와 이슈별 분당 100건까지의 원본을 ClickHouse에 묶어 쓴 뒤 확인 처리한다. 이미 처리한 event_id는 거르고, 처리할 수 없는 원문은 격리한다. 모든 큐에 길이가 있어 ClickHouse가 멈추면 대기열이 상한에서 멈추고 ingest가 503을 준다. 브라우저 에러는 올린 소스맵으로 원본 파일과 줄로 되돌리고, 해결한 이슈가 나중 릴리스에서 다시 나면 재발로 바꾼다. sdk-spring은 감시 대상 Spring Boot 앱(서블릿, WebFlux)에서 500번대로 끝난 예외, 스케줄과 비동기 작업의 예외, `log.error` 의 예외를 잡아 묶어 보낸다. `docker compose --profile core --profile obs up -d --build` 한 번으로 세 프로세스와 Prometheus, Grafana, Alertmanager가 CPU와 메모리 상한 안에서 뜨고, 대시보드 5개와 경보 규칙 8개가 함께 올라온다. 진행 상황은 [docs/WORKFLOW.md](docs/WORKFLOW.md)의 5장에 있다.
+22 작업(통합 화면)까지 했다. 17 작업의 자원 실험 결과는 [docs/EXPERIMENTS.md](docs/EXPERIMENTS.md)에 있다. core에 DSN 해석, 봉투 형식, 이벤트 모델, 지문 규칙 9개(값을 지운 메시지, 프록시와 람다 이름 정리, 앱 프레임 판정), 소스맵 해석기와 바이트 상한 캐시가 있다. ingest는 `POST /ingest/{projectId}/envelope` 로 봉투를 받아 키와 출처를 확인하고, Lua 스크립트 하나로 프로젝트 한도 차감, 대기열 길이 확인, Redis 스트림 적재를 한다. api는 콘솔 사용자의 가입, 로그인, 토큰 재발급과 시스템 단위 권한(VIEWER, MEMBER, ADMIN, OWNER)을 맡고, 시스템, 구성원, 프로젝트, DSN 키를 관리하는 API를 둔다. 뜰 때 PostgreSQL 스키마(Flyway, 테이블 16개)와 ClickHouse 스키마(테이블 5개, 분 단위 집계 뷰, worker와 api용 사용자)를 적용한다. loadgen으로 지속 부하와 폭주를 걸 수 있고, 폭주에서 대기열이 상한 20,000에서 멈추는 것을 확인했다([docs/EXPERIMENTS.md](docs/EXPERIMENTS.md)). worker는 대기열을 읽어 이벤트의 지문을 계산하고, 지문으로 이슈를 찾거나 만들고, 받은 이벤트 전부의 건수와 이슈별 분당 100건까지의 원본을 ClickHouse에 묶어 쓴 뒤 확인 처리한다. 이미 처리한 event_id는 거르고, 처리할 수 없는 원문은 격리한다. 모든 큐에 길이가 있어 ClickHouse가 멈추면 대기열이 상한에서 멈추고 ingest가 503을 준다. 브라우저 에러는 올린 소스맵으로 원본 파일과 줄로 되돌리고, 해결한 이슈가 나중 릴리스에서 다시 나면 재발로 바꾼다. sdk-spring은 감시 대상 Spring Boot 앱(서블릿, WebFlux)에서 500번대로 끝난 예외, 스케줄과 비동기 작업의 예외, `log.error` 의 예외를 잡아 묶어 보낸다. `docker compose --profile core --profile obs up -d --build` 한 번으로 세 프로세스와 Prometheus, Grafana, Alertmanager가 CPU와 메모리 상한 안에서 뜨고, 대시보드 5개와 경보 규칙 8개가 함께 올라온다. 두 SDK는 요청을 표본으로 추적해 `traceparent` 로 서비스 사이를 잇고, 콘솔의 성능 화면에서 엔드포인트 표(프로메테우스)와 느린 요청, 스팬 그림(반복 쿼리 표시)을 본다. worker는 업타임 모니터를 점검해(연속 2회로 다운과 복구 판정, 내부 주소 차단) 장애 기록을 남기고, 새 이슈, 재발, 빈도 초과, 다운, 인증서 만료, 자원 경보를 Slack과 Discord로 보낸다. 통합 화면은 시스템마다 상태 신호와 프로젝트별 요약 카드 6개를 보여 준다. 진행 상황은 [docs/WORKFLOW.md](docs/WORKFLOW.md)의 5장에 있다.
 
 ## 모듈
 
@@ -97,6 +97,16 @@ docker compose --profile core --profile obs up -d --build
 | http://localhost:19093 | Alertmanager |
 
 호스트 포트는 `ERRDECK_INGEST_HOST_PORT`, `ERRDECK_API_HOST_PORT`, `ERRDECK_GRAFANA_PORT`, `ERRDECK_PROMETHEUS_PORT`, `ERRDECK_ALERTMANAGER_PORT` 로 바꾼다. 프로세스의 지표는 컨테이너 안의 관리 포트 8091로만 나오고 호스트에 열지 않는다. 대시보드는 `deploy/grafana/generate.py` 가 만든다. 고칠 때는 이 파일을 고치고 다시 실행한다.
+
+서비스 두 개를 지나는 요청을 보려면 데모 앱 둘을 같이 띄운다(`/demo/chain/{id}` 가 다른 데모 앱의 `/demo/items/{id}` 를 부르고, 그쪽은 반복 쿼리를 낸다).
+
+```bash
+./gradlew :demo-api:bootJar
+DEMO_ERRDECK_DSN=http://demoapikey@ingest:8080/9001 docker compose --profile core --profile obs --profile demo up -d --build
+curl localhost:8090/demo/chain/3
+```
+
+자원 실험은 `python3 scripts/experiments/resources.py <실험>` 이다. 실험 이름과 방법은 스크립트 첫머리에 있다.
 
 데모 앱을 compose로 띄우려면 `./gradlew :demo-api:bootJar :loadgen:installDist` 뒤에 `docker compose --profile demo up -d demo-api` 를 쓴다.
 
