@@ -30,7 +30,8 @@ server:
   port: ${ERRDECK_INGEST_PORT:8080}
   tomcat:
     # 동시 연결 상한(14.3). 가상 스레드에는 스레드 풀이라는 천장이 없으므로 연결 수로 힙에 쌓이는 요청을 묶는다(14.7).
-    max-connections: 2000
+    # 처음 값 2,000 은 힙 160MB 에서 연결마다 잡히는 톰캣 버퍼 때문에 GC 가 멈추지 않아 500 으로 줄였다(EXPERIMENTS 17 작업).
+    max-connections: 500
     # 상한에 닿은 뒤 커널이 받아 둘 연결 수. 넘으면 연결을 거절하고 SDK 는 버린 건수를 센다.
     accept-count: 100
 
