@@ -290,6 +290,12 @@ class FingerprinterTest {
                 "com.livebroadcast.interaction.payment.PaymentController#lambda$pay"), keys);
     }
 
+    @Test
+    void 맨_위_앱_프레임을_이슈의_발생_위치로_돌려준다() {
+        assertEquals("com.livebroadcast.interaction.payment.PaymentService#charge", fingerprinter.culprit(paymentFailure(57, 33)));
+        assertEquals(null, fingerprinter.culprit(messageOnly("앱 프레임 없음")));
+    }
+
     private Event paymentFailure(int chargeLine, int controllerLine) {
         return event(
                 exception("org.springframework.dao.DataAccessResourceFailureException", "Unable to acquire JDBC Connection",

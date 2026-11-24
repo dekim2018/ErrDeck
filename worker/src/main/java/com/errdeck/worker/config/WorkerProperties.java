@@ -14,6 +14,10 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * @param claimMinIdle         다른 worker 가 이 시간 넘게 확인하지 않은 항목을 이어받는다(6.7)
  * @param retryMaxBackoff      ClickHouse 쓰기에 실패한 묶음을 다시 쓸 때 기다리는 시간의 상한
  * @param inAppPackages        SDK 가 in_app 을 정하지 않은 자바 프레임을 앱 프레임으로 볼 패키지
+ * @param maxProcessAttempts   처리에 이만큼 실패하면 격리한다(6.7)
+ * @param issueCacheSize       지문과 이슈의 대응을 기억할 개수
+ * @param samplesPerIssuePerMinute 이슈별 분당 원본 저장 상한(10.3). 넘는 것은 건수만 남긴다
+ * @param seenTtl              처리한 event_id 를 기억하는 시간(10.6)
  */
 @ConfigurationProperties("errdeck.worker")
 public record WorkerProperties(
@@ -30,5 +34,9 @@ public record WorkerProperties(
         Duration claimMinIdle,
         Duration retryMaxBackoff,
         Duration shutdownTimeout,
-        List<String> inAppPackages) {
+        List<String> inAppPackages,
+        int maxProcessAttempts,
+        int issueCacheSize,
+        int samplesPerIssuePerMinute,
+        Duration seenTtl) {
 }

@@ -1,6 +1,20 @@
 spring:
   application:
     name: errdeck-worker
+  # 로컬 개발용 기본값. 저장소 루트의 docker-compose.yml 과 같다. 배포 환경은 환경 변수로 덮어쓴다.
+  datasource:
+    url: jdbc:postgresql://${ERRDECK_DB_HOST:localhost}:${ERRDECK_DB_PORT:15432}/errdeck
+    username: ${ERRDECK_DB_USER:errdeck}
+    password: ${ERRDECK_DB_PASSWORD:errdeck}
+    hikari:
+      # 쓰기 스레드 하나와 업타임, 알림의 상태 갱신(14.6)
+      maximum-pool-size: 4
+      # 밀리초 단위다.
+      connection-timeout: 2000
+  jdbc:
+    template:
+      # worker 에서 PostgreSQL 은 2초. 넘으면 묶음을 다시 쓴다(14.9).
+      query-timeout: 2s
   data:
     redis:
       host: ${ERRDECK_REDIS_HOST:localhost}
@@ -43,6 +57,11 @@ errdeck:
     shutdown-timeout: 30s
     # SDK 가 in_app 을 정하지 않은 프레임을 앱 프레임으로 볼 패키지(6.3)
     in-app-packages: []
+    max-process-attempts: 3
+    issue-cache-size: 50000
+    # 이슈별 분당 원본 저장 상한(10.3). 넘는 것은 건수만 남긴다.
+    samples-per-issue-per-minute: 100
+    seen-ttl: 1h
   clickhouse:
     url: http://${ERRDECK_CLICKHOUSE_HOST:localhost}:${ERRDECK_CLICKHOUSE_PORT:18123}
     database: errdeck

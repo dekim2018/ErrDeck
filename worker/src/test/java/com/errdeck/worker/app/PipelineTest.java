@@ -17,7 +17,7 @@ import com.errdeck.core.fingerprint.Fingerprinter;
 import com.errdeck.worker.config.WorkerProperties;
 import com.errdeck.worker.domain.QueueEntry;
 import com.errdeck.worker.domain.QueueStream;
-import com.errdeck.worker.support.FakeEventSink;
+import com.errdeck.worker.support.FakeBatchWriter;
 import com.errdeck.worker.support.FakeQueueSource;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.time.Clock;
@@ -35,7 +35,7 @@ class PipelineTest {
     private static final EnvelopeCodec CODEC = new EnvelopeCodec(EnvelopeLimits.DEFAULT);
 
     private final FakeQueueSource source = new FakeQueueSource();
-    private final FakeEventSink sink = new FakeEventSink();
+    private final FakeBatchWriter sink = new FakeBatchWriter();
     private Pipeline pipeline;
 
     @AfterEach
@@ -156,6 +156,21 @@ class PipelineTest {
         assertThat(sink.rows()).isEqualTo(1);
     }
 
+    @Test
+    void 처리에_세_번_실패한_항목은_원문을_격리하고_확인_처리한다() {
+        byte[] garbage = {1, 2, 3};
+        source.add(QueueStream.EVENTS, () -> garbage);
+        source.add(QueueStream.EVENTS, () -> envelope(1));
+
+        start(properties(5000, Duration.ofMillis(50)));
+
+        await().atMost(Duration.ofSeconds(10)).until(() -> source.acked.size() == 2 && pipeline.inFlight() == 0);
+        assertThat(sink.rows()).isEqualTo(1);
+        assertThat(sink.quarantined).hasSize(1);
+        assertThat(sink.quarantined.getFirst().raw()).isEqualTo(garbage);
+        assertThat(sink.quarantined.getFirst().reason()).startsWith("처리 실패");
+    }
+
     private void start(WorkerProperties properties) {
         WorkerMetrics metrics = new WorkerMetrics(new SimpleMeterRegistry());
         EnvelopeProcessor processor = new EnvelopeProcessor(CODEC, new Fingerprinter(new AppFrames(List.of("com.app"))), metrics);
@@ -169,19 +184,22 @@ class PipelineTest {
 
     static WorkerProperties properties(int batchMaxRows, Duration batchMaxWait, int handoff, int writeQueue) {
         return new WorkerProperties("g", 500, Duration.ofMillis(20), handoff, 2, 3, writeQueue, batchMaxRows, batchMaxWait,
-                Duration.ofHours(1), Duration.ofSeconds(60), Duration.ofMillis(200), Duration.ofSeconds(30), List.of());
+                Duration.ofHours(1), Duration.ofSeconds(60), Duration.ofMillis(200), Duration.ofSeconds(30), List.of(),
+                3, 1000, 100, Duration.ofHours(1));
     }
 
     private static WorkerProperties withShutdown(WorkerProperties p, Duration timeout) {
         return new WorkerProperties(p.consumerGroup(), p.readCount(), p.readBlock(), p.handoffCapacity(), p.computeThreads(),
                 p.eventsPerTransaction(), p.writeQueueCapacity(), p.batchMaxRows(), p.batchMaxWait(), p.claimInterval(),
-                p.claimMinIdle(), p.retryMaxBackoff(), timeout, p.inAppPackages());
+                p.claimMinIdle(), p.retryMaxBackoff(), timeout, p.inAppPackages(),
+                p.maxProcessAttempts(), p.issueCacheSize(), p.samplesPerIssuePerMinute(), p.seenTtl());
     }
 
     private static WorkerProperties withClaimInterval(WorkerProperties p, Duration interval) {
         return new WorkerProperties(p.consumerGroup(), p.readCount(), p.readBlock(), p.handoffCapacity(), p.computeThreads(),
                 p.eventsPerTransaction(), p.writeQueueCapacity(), p.batchMaxRows(), p.batchMaxWait(), interval,
-                p.claimMinIdle(), p.retryMaxBackoff(), p.shutdownTimeout(), p.inAppPackages());
+                p.claimMinIdle(), p.retryMaxBackoff(), p.shutdownTimeout(), p.inAppPackages(),
+                p.maxProcessAttempts(), p.issueCacheSize(), p.samplesPerIssuePerMinute(), p.seenTtl());
     }
 
     static byte[] envelope(int events) {

@@ -65,6 +65,20 @@ public final class Fingerprinter {
         return hash(Fingerprint.Basis.MESSAGE, byMessage.toString());
     }
 
+    /**
+     * 이슈 목록에서 어디서 났는지 보여 줄 맨 위 앱 프레임. 예외가 난 곳에 가장 가까운 앱 프레임이다.
+     * 사슬의 바깥 예외부터 보고, 앱 프레임이 하나도 없으면 null.
+     */
+    public String culprit(Event event) {
+        for (ExceptionInfo exception : event.exceptions()) {
+            List<String> keys = appFrameKeys(exception.frames());
+            if (!keys.isEmpty()) {
+                return keys.getFirst();
+            }
+        }
+        return null;
+    }
+
     /** 앱 프레임만 남기고 이름의 꼬리를 뗀 뒤, 연속으로 같은 프레임은 하나로 접는다. 무한 재귀의 깊이가 지문을 바꾸지 않게 한다. */
     List<String> appFrameKeys(List<StackFrame> frames) {
         List<String> keys = new ArrayList<>();

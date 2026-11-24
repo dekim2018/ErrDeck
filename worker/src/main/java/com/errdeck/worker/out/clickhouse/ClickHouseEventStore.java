@@ -1,9 +1,10 @@
 package com.errdeck.worker.out.clickhouse;
 
 import com.errdeck.core.json.Json;
-import com.errdeck.worker.app.EventSink;
+import com.errdeck.worker.app.EventStore;
 import com.errdeck.worker.config.ClickHouseProperties;
 import com.errdeck.worker.domain.EventRow;
+import com.errdeck.worker.domain.Tick;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.net.URI;
@@ -15,38 +16,48 @@ import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
 
 /**
- * 이벤트 묶음을 ClickHouse 의 HTTP 인터페이스로 한 번에 넣는다. 행은 한 줄에 JSON 하나(JSONEachRow)로 보낸다.
+ * 묶음을 ClickHouse 의 HTTP 인터페이스로 테이블마다 한 번에 넣는다. 행은 한 줄에 JSON 하나(JSONEachRow)로 보낸다.
  * 묶음 하나가 파트 하나가 되므로 작게 여러 번 쓰지 않는다(10.4).
  */
-public class ClickHouseEventSink implements EventSink {
+public class ClickHouseEventStore implements EventStore {
 
-    private static final String INSERT = "INSERT INTO events (project_id, event_id, fingerprint, timestamp, received_at, "
+    private static final String EVENTS = "INSERT INTO events (project_id, event_id, fingerprint, timestamp, received_at, "
             + "environment, release, level, exc_type, message, user_hash, trace_id, tags, restored, payload) FORMAT JSONEachRow";
+    private static final String TICKS = "INSERT INTO event_ticks (project_id, fingerprint, timestamp, count, user_hash) FORMAT JSONEachRow";
 
     private final HttpClient client;
-    private final URI uri;
     private final ClickHouseProperties properties;
 
-    public ClickHouseEventSink(ClickHouseProperties properties) {
+    public ClickHouseEventStore(ClickHouseProperties properties) {
         this.properties = properties;
         this.client = HttpClient.newBuilder().connectTimeout(properties.timeout()).build();
-        // 시각은 ISO-8601 UTC 문자열로 보내므로 시간대가 붙은 값을 읽게 한다.
-        this.uri = properties.url().resolve("/?database=" + encode(properties.database())
-                + "&date_time_input_format=best_effort&query=" + encode(INSERT));
     }
 
     @Override
-    public void write(List<EventRow> rows) {
+    public void writeEvents(List<EventRow> rows) {
+        insert(EVENTS, rows, ClickHouseEventStore::event);
+    }
+
+    @Override
+    public void writeTicks(List<Tick> ticks) {
+        insert(TICKS, ticks, ClickHouseEventStore::tick);
+    }
+
+    private <T> void insert(String statement, List<T> rows, Function<T, Map<String, Object>> toJson) {
         if (rows.isEmpty()) {
             return;
         }
-        ByteArrayOutputStream body = new ByteArrayOutputStream(rows.size() * 512);
-        for (EventRow row : rows) {
-            body.writeBytes(Json.writeBytes(toJson(row)));
+        ByteArrayOutputStream body = new ByteArrayOutputStream(rows.size() * 256);
+        for (T row : rows) {
+            body.writeBytes(Json.writeBytes(toJson.apply(row)));
             body.write('\n');
         }
+        // 시각은 ISO-8601 UTC 문자열로 보내므로 시간대가 붙은 값을 읽게 한다.
+        URI uri = properties.url().resolve("/?database=" + encode(properties.database())
+                + "&date_time_input_format=best_effort&query=" + encode(statement));
         HttpRequest request = HttpRequest.newBuilder(uri)
                 .timeout(properties.timeout())
                 .header("X-ClickHouse-User", properties.user())
@@ -67,7 +78,7 @@ public class ClickHouseEventSink implements EventSink {
         }
     }
 
-    private static Map<String, Object> toJson(EventRow row) {
+    private static Map<String, Object> event(EventRow row) {
         Map<String, Object> json = new LinkedHashMap<>();
         json.put("project_id", row.projectId());
         json.put("event_id", row.eventId().toString());
@@ -84,6 +95,17 @@ public class ClickHouseEventSink implements EventSink {
         json.put("tags", row.tags());
         json.put("restored", row.restored() ? 1L : 0L);
         json.put("payload", row.payload());
+        return json;
+    }
+
+    private static Map<String, Object> tick(Tick tick) {
+        Map<String, Object> json = new LinkedHashMap<>();
+        json.put("project_id", tick.projectId());
+        json.put("fingerprint", tick.fingerprint());
+        json.put("timestamp", tick.timestamp().toString());
+        // UInt32 열이다. SDK 가 보낸 count 가 그보다 크면 상한으로 자른다.
+        json.put("count", Math.min(tick.count(), 0xFFFF_FFFFL));
+        json.put("user_hash", tick.userHash());
         return json;
     }
 

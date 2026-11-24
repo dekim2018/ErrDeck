@@ -12,15 +12,13 @@ import com.errdeck.core.fingerprint.Fingerprinter;
 import com.errdeck.worker.app.WorkerMetrics.Stage;
 import com.errdeck.worker.domain.EventRow;
 import com.errdeck.worker.domain.ProcessedEntry;
+import com.errdeck.worker.domain.Quarantine;
 import com.errdeck.worker.domain.QueueEntry;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.atomic.LongAdder;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * 대기열 항목 하나를 저장할 행으로 바꾼다. 압축 해제, 해석, 지문 계산만 하고 I/O 는 하지 않는다(14.5).
@@ -28,12 +26,11 @@ import org.slf4j.LoggerFactory;
  */
 public class EnvelopeProcessor {
 
-    private static final Logger log = LoggerFactory.getLogger(EnvelopeProcessor.class);
+    static final int TITLE_MAX = 200;
 
     private final EnvelopeCodec codec;
     private final Fingerprinter fingerprinter;
     private final WorkerMetrics metrics;
-    private final LongAdder unreadable = new LongAdder();
 
     public EnvelopeProcessor(EnvelopeCodec codec, Fingerprinter fingerprinter, WorkerMetrics metrics) {
         this.codec = codec;
@@ -41,40 +38,31 @@ public class EnvelopeProcessor {
         this.metrics = metrics;
     }
 
+    /**
+     * @throws EnvelopeException 봉투를 풀거나 나누지 못했을 때. 단계 구조가 다시 시도하고, 세 번 실패하면 격리한다
+     */
     public ProcessedEntry process(QueueEntry entry) {
         long start = System.nanoTime();
-        Envelope envelope;
-        try {
-            envelope = codec.decode(entry.body());
-        } catch (EnvelopeException e) {
-            // 격리 테이블로 옮기는 것은 08 작업에서 한다. 그때까지는 버리고 세어 둔다.
-            unreadable.increment();
-            log.warn("봉투를 읽지 못해 버린다. 프로젝트 {}, 항목 {}: {}", entry.projectId(), entry.id(), e.getMessage());
-            return new ProcessedEntry(entry.ref(), entry.receivedAt(), List.of());
-        }
+        Envelope envelope = codec.decode(entry.body());
         metrics.stage(Stage.DECOMPRESS, System.nanoTime() - start);
 
         start = System.nanoTime();
         List<EventRow> rows = new ArrayList<>();
+        List<Quarantine> quarantined = new ArrayList<>();
         for (EnvelopeItem item : envelope.items()) {
-            // 트랜잭션은 19 작업, client_report 는 08 작업에서 저장한다.
+            // 트랜잭션은 19 작업에서 저장한다. client_report 는 아직 저장할 곳이 없다(6장 끝).
             if (item.type() != ItemType.EVENT) {
                 continue;
             }
             try {
                 rows.add(toRow(entry, Event.fromJson(item.payload())));
             } catch (IllegalArgumentException e) {
-                unreadable.increment();
-                log.warn("이벤트를 읽지 못해 버린다. 프로젝트 {}, 항목 {}: {}", entry.projectId(), entry.id(), e.getMessage());
+                // 이벤트 하나가 틀렸다고 봉투의 나머지까지 버리지 않는다. 다시 해도 같으므로 바로 격리한다.
+                quarantined.add(new Quarantine(entry.projectId(), item.payload(), "이벤트 형식: " + e.getMessage()));
             }
         }
         metrics.stage(Stage.FINGERPRINT, System.nanoTime() - start);
-        return new ProcessedEntry(entry.ref(), entry.receivedAt(), rows);
-    }
-
-    /** 해석하지 못해 버린 봉투와 이벤트의 수. */
-    public long unreadable() {
-        return unreadable.sum();
+        return new ProcessedEntry(entry.ref(), entry.receivedAt(), rows, quarantined);
     }
 
     private EventRow toRow(QueueEntry entry, Event event) {
@@ -85,6 +73,7 @@ public class EnvelopeProcessor {
                 entry.projectId(),
                 event.eventId(),
                 fingerprint.value(),
+                fingerprint.ruleVersion(),
                 event.timestamp(),
                 entry.receivedAt(),
                 nullToEmpty(event.environment()),
@@ -96,7 +85,17 @@ public class EnvelopeProcessor {
                 nullToEmpty(event.traceId()),
                 event.tags(),
                 false,
-                new String(event.toJson(), StandardCharsets.UTF_8));
+                new String(event.toJson(), StandardCharsets.UTF_8),
+                event.count(),
+                title(primary, message),
+                fingerprinter.culprit(event));
+    }
+
+    /** 이슈 목록에 보일 제목. 목록 한 줄에 들어가도록 자른다. */
+    static String title(ExceptionInfo primary, String message) {
+        String title = primary == null ? message : message.isEmpty() ? primary.type() : primary.type() + ": " + message;
+        title = title.isEmpty() ? "(메시지 없음)" : title.strip();
+        return title.length() <= TITLE_MAX ? title : title.substring(0, TITLE_MAX - 1) + "…";
     }
 
     /**
