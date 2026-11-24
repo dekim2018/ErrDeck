@@ -10,17 +10,26 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-webmvc")
     implementation("org.springframework.boot:spring-boot-starter-actuator")
     implementation("org.springframework.boot:spring-boot-starter-data-redis")
+    implementation("org.springframework.boot:spring-boot-starter-jdbc")
+    runtimeOnly("org.postgresql:postgresql")
     runtimeOnly("io.micrometer:micrometer-registry-prometheus")
 
     testImplementation(testFixtures(project(":core")))
     testImplementation("org.springframework.boot:spring-boot-starter-test")
     testImplementation("org.testcontainers:testcontainers-junit-jupiter")
+    testImplementation("org.testcontainers:testcontainers-postgresql")
+    // 스키마는 api 가 소유한다. 테스트에서만 api 의 Flyway 스크립트를 적용한다.
+    testImplementation("org.flywaydb:flyway-core")
+    testImplementation("org.flywaydb:flyway-database-postgresql")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 
-// ClickHouse 스키마는 api 가 소유한다. 테스트에서만 api 의 SQL 파일을 컨테이너에 적용한다.
+// 스키마는 api 가 소유한다. 테스트에서만 api 의 SQL 파일과 Flyway 스크립트를 컨테이너에 적용한다.
 tasks.test {
     val schema = project(":api").file("src/main/resources/clickhouse")
+    val migrations = project(":api").file("src/main/resources/db/migration")
     inputs.dir(schema)
+    inputs.dir(migrations)
     systemProperty("errdeck.clickhouse-schema", schema.absolutePath)
+    systemProperty("errdeck.migrations", migrations.absolutePath)
 }
