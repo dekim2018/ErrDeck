@@ -63,6 +63,11 @@ export interface StackFrame {
   lineno?: number
   colno?: number
   in_app?: boolean
+  /** 복원하기 전의 번들 주소 */
+  abs_path?: string
+  /** 원본 코드의 앞뒤 줄. 맨 위 앱 프레임에만 있다 */
+  context?: string[]
+  context_start?: number
 }
 
 export interface ExceptionInfo {
@@ -107,4 +112,12 @@ export interface IssueDetail {
   traceId: string | null
   comments: Comment[]
   grafanaUrl: string
+}
+
+export interface ReleaseSummary {
+  version: string
+  createdAt: string
+  artifacts: number
+  newIssues: number
+  regressed: number
 }

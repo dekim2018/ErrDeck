@@ -29,6 +29,8 @@ export function frameLabel(frame: StackFrame): string {
   const where = frame.filename
     ? `${frame.filename}${frame.lineno ? `:${frame.lineno}` : ''}${frame.colno ? `:${frame.colno}` : ''}`
     : '알 수 없는 위치'
+  // 복원한 브라우저 프레임은 소스맵에 원래 이름이 없으면 함수 이름이 비어 있다(CHOICES 15-4). 그때는 위치만 보인다.
+  if (!frame.module && !frame.function) return where
   const fn = frame.module ? `${frame.module}.${frame.function ?? '?'}` : (frame.function ?? '?')
   return `${fn} (${where})`
 }
