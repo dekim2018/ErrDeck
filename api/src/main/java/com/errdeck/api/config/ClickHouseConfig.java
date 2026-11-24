@@ -31,6 +31,24 @@ public class ClickHouseConfig {
                 properties.database());
     }
 
+    /** 모니터와 웹훅 주소의 내부 주소 확인(9.4). worker 와 같은 허용 목록을 쓴다. */
+    @Bean
+    com.errdeck.core.net.UrlGuard urlGuard(@org.springframework.beans.factory.annotation.Value("${errdeck.uptime.allowed-hosts:}") java.util.List<String> hosts) {
+        return new com.errdeck.core.net.UrlGuard(hosts.stream().filter(h -> !h.isBlank()).collect(java.util.stream.Collectors.toSet()));
+    }
+
+    @Bean
+    com.errdeck.api.out.clickhouse.ClickHouseTraceStore traceStore(com.errdeck.api.out.clickhouse.ClickHouseReader reader) {
+        return new com.errdeck.api.out.clickhouse.ClickHouseTraceStore(reader);
+    }
+
+    /** 감시 대상의 요청 지표(8.1). 제한 시간 2초(14.9). */
+    @Bean
+    com.errdeck.api.out.prometheus.PrometheusEndpointMetrics endpointMetrics(
+            @org.springframework.beans.factory.annotation.Value("${errdeck.prometheus.url}") java.net.URI url) {
+        return new com.errdeck.api.out.prometheus.PrometheusEndpointMetrics(url, java.time.Duration.ofSeconds(2));
+    }
+
     @Bean
     com.errdeck.api.out.clickhouse.ClickHouseEventStats eventStats(com.errdeck.api.out.clickhouse.ClickHouseReader reader) {
         return new com.errdeck.api.out.clickhouse.ClickHouseEventStats(reader);

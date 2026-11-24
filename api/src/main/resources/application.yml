@@ -12,6 +12,8 @@ spring:
     password: ${ERRDECK_DB_PASSWORD:errdeck}
     hikari:
       maximum-pool-size: 10
+      # 커넥션 획득 제한(14.6). 기본 30초면 DB 가 느릴 때 요청이 30초씩 매달려 쌓인다. 밀리초 단위다.
+      connection-timeout: 2000
   data:
     redis:
       host: ${ERRDECK_REDIS_HOST:localhost}
@@ -20,6 +22,11 @@ spring:
 
 server:
   port: ${ERRDECK_API_PORT:8081}
+  tomcat:
+    # 동시 연결 상한. 가상 스레드에는 천장이 없어 조회가 몰리면 기다리는 요청이 힙에 쌓인다(14.4).
+    # 17 작업에서 초당 300번의 이슈 목록 조회에 힙 256MB 가 넘쳤다.
+    max-connections: 200
+    accept-count: 100
 
 management:
   endpoints:
@@ -69,6 +76,12 @@ errdeck:
     allowed-origins: ${ERRDECK_CONSOLE_ORIGINS:http://localhost:5173}
     # 이슈 상세의 그라파나 링크(12.4). 16 작업에서 compose 의 그라파나 주소로 맞춘다.
     grafana-url: ${ERRDECK_GRAFANA_URL:http://localhost:3000}
+  uptime:
+    # 내부 주소지만 모니터와 웹훅으로 허용할 호스트(9.4). worker 와 같게 둔다.
+    allowed-hosts: ${ERRDECK_UPTIME_ALLOWED_HOSTS:}
+  prometheus:
+    # 성능 화면의 엔드포인트 표와 통합 화면의 요약 카드(8.1, 12.2). 못 읽으면 표본 표와 빈 카드로 보인다.
+    url: ${ERRDECK_PROMETHEUS_URL:http://localhost:19090}
   files:
     # 소스맵 볼륨(7.2). worker 도 같은 경로를 쓴다. compose 에서는 공유 볼륨을 붙인다(16 작업).
     dir: ${ERRDECK_FILES_DIR:./data/artifacts}

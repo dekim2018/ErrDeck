@@ -129,9 +129,18 @@ public class Pipeline {
         // 이어받기를 한 번 시작하면 미확인 목록을 끝까지 쪽마다 넘겨 본다. 한 번에 한 쪽(500건)만 가져오면
         // 읽기 제한 시간으로 받지 못한 항목 1만 건을 되찾는 데 10분이 걸렸다(EXPERIMENTS 17 작업).
         String claimCursor = null;
+        // 읽기가 제한 시간을 넘기면 Redis 는 항목을 넘겼는데 이 worker 는 못 받았을 수 있다. 자기 미확인 목록을 처음부터 다시 읽는다.
+        // 이것이 없으면 이어받기의 최소 대기(60초)까지 그 항목들이 멈춘다(EXPERIMENTS 17 작업).
+        String ownCursor = null;
         try {
             while (reading) {
                 try {
+                    if (ownCursor != null) {
+                        List<QueueEntry> own = source.readOwn(stream, properties.readCount(), ownCursor);
+                        enqueue(queue, own);
+                        ownCursor = own.isEmpty() ? null : own.getLast().id();
+                        continue;
+                    }
                     if (claimCursor != null || !clock.instant().isBefore(nextClaim)) {
                         QueueSource.Claimed claimed = source.claim(stream, properties.claimMinIdle(), properties.readCount(),
                                 claimCursor == null ? QueueSource.CLAIM_START : claimCursor);
@@ -147,8 +156,7 @@ public class Pipeline {
                     enqueue(queue, source.read(stream, properties.readCount(), properties.readBlock()));
                 } catch (RuntimeException e) {
                     log.warn("{} 대기열을 읽지 못했다: {}", stream, e.toString());
-                    // 읽기 제한 시간이 지났어도 Redis 는 항목을 이 worker 에게 넘겼을 수 있다. 다음 이어받기를 앞당긴다.
-                    nextClaim = clock.instant().plus(properties.claimMinIdle());
+                    ownCursor = QueueSource.CLAIM_START;
                     sleep(Duration.ofSeconds(1));
                 }
             }
@@ -311,7 +319,7 @@ public class Pipeline {
 
     /** 쓰기 큐에서 차지하는 자리. 이벤트 수이고, 큐 전체보다 큰 봉투도 들어갈 수 있게 상한을 둔다. */
     private int weight(ProcessedEntry entry) {
-        return Math.min(properties.writeQueueCapacity(), Math.max(1, entry.rows().size() + entry.quarantined().size()));
+        return Math.min(properties.writeQueueCapacity(), Math.max(1, entry.rows().size() + entry.quarantined().size() + entry.transactions().size()));
     }
 
     private boolean pastGiveUp() {

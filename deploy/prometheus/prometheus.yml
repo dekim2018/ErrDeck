@@ -24,6 +24,11 @@ scrape_configs:
     metrics_path: /actuator/prometheus
     static_configs:
       - targets: ["api:8091"]
+  # 감시 대상. job 이름은 콘솔의 프로젝트 슬러그와 같아야 성능 화면이 찾는다(8.1).
+  - job_name: demo-api
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["demo-api:8090", "demo-api-downstream:8090"]
   - job_name: postgres
     static_configs:
       - targets: ["postgres-exporter:9187"]

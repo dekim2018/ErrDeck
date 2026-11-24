@@ -73,6 +73,12 @@ public class WorkerMetrics {
         }
     }
 
+    public void transactions(long count) {
+        if (count > 0) {
+            registry.counter("errdeck.transactions.processed").increment(count);
+        }
+    }
+
     public void endToEnd(Duration latency) {
         e2e.record(latency.isNegative() ? Duration.ZERO : latency);
     }

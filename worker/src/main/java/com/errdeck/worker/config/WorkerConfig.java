@@ -29,7 +29,7 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.transaction.support.TransactionTemplate;
 
 @Configuration
-@EnableConfigurationProperties({WorkerProperties.class, ClickHouseProperties.class})
+@EnableConfigurationProperties({WorkerProperties.class, ClickHouseProperties.class, com.errdeck.worker.uptime.UptimeProperties.class})
 public class WorkerConfig {
 
     @Bean
@@ -43,12 +43,17 @@ public class WorkerConfig {
     }
 
     @Bean
+    ClickHouseEventStore clickHouseEventStore(ClickHouseProperties clickHouse) {
+        return new ClickHouseEventStore(clickHouse);
+    }
+
+    @Bean
     IssueBatchWriter batchWriter(StringRedisTemplate redis, JdbcClient jdbc, JdbcTemplate template, TransactionTemplate transactions,
-                                 ClickHouseProperties clickHouse, WorkerProperties properties, WorkerMetrics metrics, Clock clock) {
+                                 ClickHouseEventStore store, WorkerProperties properties, WorkerMetrics metrics, Clock clock) {
         return new IssueBatchWriter(
                 new RedisSeenEvents(redis, properties.seenTtl()),
                 new JdbcIssueRepository(jdbc, template, transactions),
-                new ClickHouseEventStore(clickHouse),
+                store,
                 metrics, clock, properties.issueCacheSize(), properties.samplesPerIssuePerMinute());
     }
 
@@ -81,6 +86,40 @@ public class WorkerConfig {
     @Bean
     PipelineLifecycle pipelineLifecycle(Pipeline pipeline, RedisQueueSource source) {
         return new PipelineLifecycle(pipeline, source);
+    }
+
+    /** 사용자가 넣은 주소를 부르기 전의 확인(9.4). 업타임 점검과 알림 웹훅이 같이 쓴다. */
+    @Bean
+    com.errdeck.core.net.UrlGuard urlGuard(com.errdeck.worker.uptime.UptimeProperties uptime) {
+        return new com.errdeck.core.net.UrlGuard(java.util.Set.copyOf(uptime.allowedHosts()));
+    }
+
+    @Bean
+    com.errdeck.worker.alert.AlertEngine alertEngine(JdbcClient jdbc, StringRedisTemplate redis, ClickHouseEventStore store, Clock clock,
+                                                     @org.springframework.beans.factory.annotation.Value("${errdeck.console-url}") String consoleUrl) {
+        return new com.errdeck.worker.alert.AlertEngine(jdbc, redis, store, clock, consoleUrl);
+    }
+
+    @Bean
+    com.errdeck.worker.alert.AlertPoller alertPoller(com.errdeck.worker.alert.AlertEngine engine) {
+        return new com.errdeck.worker.alert.AlertPoller(engine);
+    }
+
+    @Bean
+    com.errdeck.worker.alert.NotificationDispatcher notificationDispatcher(JdbcClient jdbc, StringRedisTemplate redis,
+                                                                           com.errdeck.core.net.UrlGuard guard,
+                                                                           io.micrometer.core.instrument.MeterRegistry registry, Clock clock) {
+        return new com.errdeck.worker.alert.NotificationDispatcher(jdbc, redis, guard, registry, clock, consumerName());
+    }
+
+    @Bean
+    @org.springframework.boot.autoconfigure.condition.ConditionalOnBooleanProperty(name = "errdeck.uptime.enabled", matchIfMissing = true)
+    com.errdeck.worker.uptime.UptimeRunner uptimeRunner(JdbcClient jdbc, TransactionTemplate transactions, com.errdeck.core.net.UrlGuard guard,
+                                                        ClickHouseEventStore store, com.errdeck.worker.alert.AlertEngine alerts,
+                                                        StringRedisTemplate redis, com.errdeck.worker.uptime.UptimeProperties properties,
+                                                        io.micrometer.core.instrument.MeterRegistry registry, Clock clock) {
+        return new com.errdeck.worker.uptime.UptimeRunner(new com.errdeck.worker.uptime.MonitorStore(jdbc, transactions),
+                new com.errdeck.worker.uptime.UptimeChecker(guard, clock), store, alerts, redis, properties, registry, clock);
     }
 
     /**
