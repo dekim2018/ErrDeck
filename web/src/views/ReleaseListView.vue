@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import ProjectTabs from '../components/ProjectTabs.vue'
 import { computed, ref, watch } from 'vue'
 import { ApiError } from '../api/client'
 import type { ReleaseSummary } from '../api/types'
@@ -31,10 +32,7 @@ watch(() => props.projectId, load, { immediate: true })
     <header class="page-head">
       <h1>{{ project?.slug ?? '프로젝트' }} <span class="muted">릴리스</span></h1>
     </header>
-    <nav class="tabs">
-      <RouterLink :to="{ name: 'issues', params: { systemId, projectId } }">이슈</RouterLink>
-      <RouterLink :to="{ name: 'releases', params: { systemId, projectId } }">릴리스</RouterLink>
-    </nav>
+    <ProjectTabs :system-id="systemId" :project-id="projectId" />
     <p v-if="error" class="error" role="alert">{{ error }}</p>
     <table class="issues">
       <thead>

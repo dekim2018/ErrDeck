@@ -1,4 +1,4 @@
-import type { IssueDetail, IssueStatus, IssueSummary, Period, Project, ReleaseSummary, Sort, SystemView, Token, User } from './types'
+import type { IssueDetail, IssueStatus, IssueSummary, Period, Project, ReleaseSummary, Sort, SystemView, Token, User, EndpointTable, TransactionView, Overview, Monitor, Incident, AlertRule, NotificationView } from './types'
 
 /** api 가 돌려준 실패. 본문은 RFC 9457 형식이다. */
 export class ApiError extends Error {
@@ -91,6 +91,60 @@ export class Client {
 
   changeStatus(issueId: number, status: IssueStatus, extra: { resolvedInRelease?: string; ignoredUntil?: string } = {}): Promise<void> {
     return this.request('PATCH', `/api/issues/${issueId}`, { status, ...extra })
+  }
+
+  endpoints(projectId: number, period: string): Promise<EndpointTable> {
+    return this.request('GET', `/api/projects/${projectId}/performance/endpoints?period=${period}`)
+  }
+
+  slowTransactions(projectId: number, name: string | null, period: string): Promise<TransactionView[]> {
+    const params = new URLSearchParams({ period })
+    if (name) params.set('name', name)
+    return this.request('GET', `/api/projects/${projectId}/performance/transactions?${params}`)
+  }
+
+  trace(traceId: string): Promise<TransactionView[]> {
+    return this.request('GET', `/api/traces/${traceId}`)
+  }
+
+  overview(): Promise<Overview> {
+    return this.request('GET', '/api/overview')
+  }
+
+  monitors(projectId: number): Promise<Monitor[]> {
+    return this.request('GET', `/api/projects/${projectId}/monitors`)
+  }
+
+  createMonitor(projectId: number, body: Partial<Monitor>): Promise<{ id: number }> {
+    return this.request('POST', `/api/projects/${projectId}/monitors`, body)
+  }
+
+  pauseMonitor(monitorId: number, paused: boolean): Promise<void> {
+    return this.request('PATCH', `/api/monitors/${monitorId}`, { paused })
+  }
+
+  deleteMonitor(monitorId: number): Promise<void> {
+    return this.request('DELETE', `/api/monitors/${monitorId}`)
+  }
+
+  incidents(monitorId: number): Promise<Incident[]> {
+    return this.request('GET', `/api/monitors/${monitorId}/incidents`)
+  }
+
+  alertRules(projectId: number): Promise<AlertRule[]> {
+    return this.request('GET', `/api/projects/${projectId}/alert-rules`)
+  }
+
+  createAlertRule(projectId: number, body: Partial<AlertRule>): Promise<{ id: number }> {
+    return this.request('POST', `/api/projects/${projectId}/alert-rules`, body)
+  }
+
+  toggleAlertRule(ruleId: number, enabled: boolean): Promise<void> {
+    return this.request('PATCH', `/api/alert-rules/${ruleId}`, { enabled })
+  }
+
+  notifications(projectId: number): Promise<NotificationView[]> {
+    return this.request('GET', `/api/projects/${projectId}/notifications`)
   }
 
   releases(projectId: number): Promise<ReleaseSummary[]> {

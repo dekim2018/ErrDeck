@@ -126,7 +126,10 @@ watch([() => props.issueId, period], load, { immediate: true })
           </li>
         </ol>
       </template>
-      <p v-if="detail.traceId" class="muted">trace_id {{ detail.traceId }}</p>
+      <p v-if="detail.traceId" class="muted">
+        이 에러가 난 요청의 흐름:
+        <RouterLink :to="{ name: 'trace', params: { systemId, traceId: detail.traceId } }" class="mono">{{ detail.traceId }}</RouterLink>
+      </p>
     </section>
     <section v-else class="panel"><p class="muted">30일 안의 원본이 없다. 건수만 남아 있다.</p></section>
 

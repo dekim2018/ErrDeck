@@ -19,6 +19,30 @@ export const router = createRouter({
       props: (route) => ({ systemId: Number(route.params.systemId), projectId: Number(route.params.projectId) }),
     },
     {
+      path: '/systems/:systemId/projects/:projectId/performance',
+      name: 'performance',
+      component: () => import('./views/PerformanceView.vue'),
+      props: (route) => ({ systemId: Number(route.params.systemId), projectId: Number(route.params.projectId) }),
+    },
+    {
+      path: '/systems/:systemId/projects/:projectId/monitors',
+      name: 'monitors',
+      component: () => import('./views/MonitorListView.vue'),
+      props: (route) => ({ systemId: Number(route.params.systemId), projectId: Number(route.params.projectId) }),
+    },
+    {
+      path: '/systems/:systemId/projects/:projectId/alerts',
+      name: 'alerts',
+      component: () => import('./views/AlertRulesView.vue'),
+      props: (route) => ({ systemId: Number(route.params.systemId), projectId: Number(route.params.projectId) }),
+    },
+    {
+      path: '/systems/:systemId/traces/:traceId',
+      name: 'trace',
+      component: () => import('./views/TraceView.vue'),
+      props: (route) => ({ systemId: Number(route.params.systemId), traceId: String(route.params.traceId) }),
+    },
+    {
       path: '/systems/:systemId/issues/:issueId',
       name: 'issue',
       component: () => import('./views/IssueDetailView.vue'),
