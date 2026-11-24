@@ -37,7 +37,7 @@ final class EventBuilder {
                 options.environment(),
                 options.release(),
                 request == null ? null : request.userId(),
-                null,
+                capture.traceId(),
                 List.of(),
                 Math.max(1, capture.count()),
                 chain(capture.throwable()),

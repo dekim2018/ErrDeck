@@ -7,7 +7,6 @@ import com.errdeck.core.envelope.EnvelopeItem;
 import com.errdeck.core.envelope.EnvelopeLimits;
 import com.errdeck.core.envelope.ItemType;
 import com.errdeck.core.event.ClientReport;
-import com.errdeck.core.event.Event;
 import java.io.IOException;
 import java.time.Clock;
 import java.time.Duration;
@@ -36,7 +35,7 @@ public final class Sender<T> {
 
     private final BlockingQueue<T> queue;
     private final Supplier<List<T>> extra;
-    private final Function<T, Event> toEvent;
+    private final Function<T, EnvelopeItem> toItem;
     private final ToLongFunction<T> weight;
     private final Transport transport;
     private final Discards discards;
@@ -52,11 +51,11 @@ public final class Sender<T> {
     /**
      * @param extra 큐 말고 따로 보낼 것. 같은 에러를 접은 대표 건이다
      */
-    public Sender(BlockingQueue<T> queue, Supplier<List<T>> extra, Function<T, Event> toEvent, ToLongFunction<T> weight,
+    public Sender(BlockingQueue<T> queue, Supplier<List<T>> extra, Function<T, EnvelopeItem> toItem, ToLongFunction<T> weight,
                   Transport transport, Discards discards, Clock clock, int batchSize, Duration flushInterval) {
         this.queue = queue;
         this.extra = extra;
-        this.toEvent = toEvent;
+        this.toItem = toItem;
         this.weight = weight;
         this.transport = transport;
         this.discards = discards;
@@ -114,7 +113,7 @@ public final class Sender<T> {
         try {
             List<EnvelopeItem> items = new ArrayList<>(batch.size() + 1);
             for (T item : batch) {
-                items.add(new EnvelopeItem(ItemType.EVENT, toEvent.apply(item).toJson()));
+                items.add(toItem.apply(item));
             }
             if (report != null) {
                 items.add(new EnvelopeItem(ItemType.CLIENT_REPORT, report.toJson()));

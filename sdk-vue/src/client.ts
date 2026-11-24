@@ -1,6 +1,7 @@
 import { envelope, gzip, type Discarded } from './envelope'
 import { Folder, uuid } from './fold'
 import { parseStack } from './stack'
+import { Tracer } from './tracing'
 import type { Transport } from './transport'
 import type { Breadcrumb, ErrDeckEvent, Options } from './types'
 
@@ -20,6 +21,7 @@ export class Client {
   private readonly folder: Folder
   private readonly queueSize: number
   private readonly maxBreadcrumbs: number
+  readonly tracer: Tracer | null
 
   constructor(
     private readonly url: string,
@@ -30,6 +32,7 @@ export class Client {
     this.folder = new Folder(options.foldWindowMs ?? 10_000, options.foldThreshold ?? 5)
     this.queueSize = options.queueSize ?? 100
     this.maxBreadcrumbs = options.maxBreadcrumbs ?? 50
+    this.tracer = options.tracing === false ? null : new Tracer(options, now)
   }
 
   capture(error: unknown, tags?: Record<string, string>): void {
@@ -39,6 +42,7 @@ export class Client {
         this.seen.add(error)
       }
       const event = this.event(error, tags)
+      this.tracer?.markError()
       if (!this.folder.admit(event, this.now())) return
       this.enqueue(event)
     } catch {
@@ -54,6 +58,7 @@ export class Client {
   /** 모인 것을 압축해 보낸다. 보내는 중이면 다음 차례로 미룬다. */
   async flush(): Promise<void> {
     if (this.sending) return
+    await this.flushTransactions()
     const events = this.take()
     if (!events) return
     this.sending = true
@@ -73,6 +78,9 @@ export class Client {
   /** 탭이 숨겨질 때 남은 것을 보낸다. 압축은 비동기라 페이지가 사라지기 전에 끝난다는 보장이 없어 압축하지 않는다. */
   flushBeacon(): void {
     try {
+      this.tracer?.end()
+      const txs = this.tracer?.take() ?? []
+      if (txs.length && this.now() >= this.pausedUntil) this.transport.beacon(`${this.url}&kind=tx`, envelope([], [], new Date(this.now()), txs))
       const events = this.take()
       if (!events) return
       if (!this.transport.beacon(this.url, envelope(events.batch, events.discarded, new Date(this.now())))) {
@@ -81,6 +89,19 @@ export class Client {
       }
     } catch {
       // 페이지가 사라지는 중이다. 할 수 있는 것이 없다.
+    }
+  }
+
+  /** 트랜잭션은 따로 보낸다. 대기열이 나뉘어 있어 에러가 트랜잭션에 밀리지 않는다(5.4). 실패하면 버린다. */
+  private async flushTransactions(): Promise<void> {
+    const txs = this.tracer?.take() ?? []
+    if (!txs.length || this.disabled || this.now() < this.pausedUntil) return
+    try {
+      const body = envelope([], [], new Date(this.now()), txs)
+      const compressed = await gzip(body).catch(() => null)
+      await this.transport.send(compressed ? `${this.url}&kind=tx&enc=gzip` : `${this.url}&kind=tx`, compressed ?? body)
+    } catch {
+      // 트랜잭션은 표본이라 잃어도 다시 보내지 않는다.
     }
   }
 
@@ -158,6 +179,8 @@ export class Client {
       ],
       breadcrumbs: this.crumbs.slice(),
     }
+    const traceId = this.tracer?.traceId()
+    if (traceId) event.trace_id = traceId
     if (this.options.environment) event.environment = this.options.environment
     if (this.options.release) event.release = this.options.release
     if (tags && Object.keys(tags).length) event.tags = tags

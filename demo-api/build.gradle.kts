@@ -9,6 +9,10 @@ dependencies {
     implementation(project(":sdk-spring"))
     implementation("org.springframework.boot:spring-boot-starter-webmvc")
     implementation("org.springframework.boot:spring-boot-starter-actuator")
+    runtimeOnly("io.micrometer:micrometer-registry-prometheus")
+    // 추적 확인용(18 작업): 반복 쿼리를 내는 메모리 DB
+    implementation("org.springframework.boot:spring-boot-starter-jdbc")
+    runtimeOnly("com.h2database:h2")
 
     testImplementation(testFixtures(project(":core")))
     testImplementation("org.springframework.boot:spring-boot-starter-test")
