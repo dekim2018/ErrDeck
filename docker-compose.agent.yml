@@ -1,0 +1,36 @@
+# 감시 대상 서버(팬파라이브, CoPage)에 두는 프로메테우스 에이전트(13.3, adr/0012).
+# 그 서버의 Actuator 를 로컬에서 긁어 이 서비스의 프로메테우스로 밀어 보낸다. 감시 대상 서버는 나가는 연결만 쓴다.
+#
+#   ERRDECK_REMOTE_WRITE_URL=https://errdeck.duckdns.org/prometheus/api/v1/write \
+#   ERRDECK_AGENT_PASSWORD=... \
+#   ERRDECK_AGENT_TARGETS_FILE=./targets.yml \
+#   docker compose -f docker-compose.agent.yml up -d
+#
+# targets.yml 의 job 이름은 ErrDeck 콘솔의 프로젝트 슬러그와 같아야 성능 화면과 요약 카드가 찾는다(19-1).
+name: errdeck-agent
+
+services:
+  prometheus-agent:
+    image: prom/prometheus:v3.16.0
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        printf '%s' "$$ERRDECK_AGENT_PASSWORD" > /prometheus/remote-password &&
+        sed "s#__REMOTE_WRITE_URL__#$$ERRDECK_REMOTE_WRITE_URL#" /etc/prometheus/agent.yml > /prometheus/agent.yml &&
+        exec /bin/prometheus --agent --config.file=/prometheus/agent.yml --storage.agent.path=/prometheus
+    environment:
+      ERRDECK_REMOTE_WRITE_URL: ${ERRDECK_REMOTE_WRITE_URL:?}
+      ERRDECK_AGENT_PASSWORD: ${ERRDECK_AGENT_PASSWORD:?}
+      GOMAXPROCS: 1
+    volumes:
+      - ./deploy/agent/agent.yml:/etc/prometheus/agent.yml:ro
+      - ${ERRDECK_AGENT_TARGETS_FILE:-./deploy/agent/targets.example.yml}:/etc/prometheus/targets.yml:ro
+      - agent-data:/prometheus
+    # 감시 대상의 도커 네트워크에 붙인다. 팬파라이브는 이 이름을 자기 네트워크로 바꾼다.
+    network_mode: ${ERRDECK_AGENT_NETWORK:-bridge}
+    cpus: 0.25
+    mem_limit: 128m
+    restart: unless-stopped
+
+volumes:
+  agent-data:

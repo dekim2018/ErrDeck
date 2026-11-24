@@ -1,0 +1,44 @@
+# SDK 를 GitHub Packages 에 올린다(23 작업). sdk-v0.1.0 같은 태그를 밀면 돈다.
+name: publish-sdk
+
+on:
+  push:
+    tags: ["sdk-v*"]
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  maven:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "25"
+      - uses: gradle/actions/setup-gradle@v4
+      - run: ./gradlew :core:publish :sdk-spring:publish -x test
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  npm:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sdk-vue
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          registry-url: https://npm.pkg.github.com
+          scope: "@dekim2018"
+      - run: npm ci
+      - run: npm run build
+      # GitHub Packages 의 npm 은 범위가 저장소 주인과 같아야 한다. 올릴 때만 이름을 바꾼다.
+      - run: npm pkg set name=@dekim2018/errdeck-sdk-vue
+      - run: npm publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
