@@ -58,7 +58,7 @@ class SchemaTest extends TestInfra {
     @Test
     void ClickHouse에_테이블_5개와_구체화_뷰와_실행_기록이_만들어진다() {
         assertThat(clickHouseTables()).containsExactlyElementsOf(CLICKHOUSE_TABLES);
-        assertThat(migrator.appliedVersions()).containsExactlyInAnyOrder(1, 2, 3, 4, 5, 6, 7);
+        assertThat(migrator.appliedVersions()).containsExactlyInAnyOrder(1, 2, 3, 4, 5, 6, 7, 8);
     }
 
     @Test
@@ -67,18 +67,19 @@ class SchemaTest extends TestInfra {
 
         assertThat(ran).isEmpty();
         assertThat(clickHouseTables()).containsExactlyElementsOf(CLICKHOUSE_TABLES);
-        assertThat(admin.execute("errdeck", "SELECT count() FROM schema_migrations").strip()).isEqualTo("7");
+        assertThat(admin.execute("errdeck", "SELECT count() FROM schema_migrations").strip()).isEqualTo("8");
     }
 
     @Test
-    void 건수_테이블에_넣으면_구체화_뷰가_분_단위로_합친다() {
+    void 건수_테이블에_넣으면_구체화_뷰가_분_단위로_합치고_사용자_없는_이벤트는_사용자로_세지_않는다() {
         String fingerprint = "f".repeat(31) + "1";
         admin.execute("errdeck", """
                 INSERT INTO event_ticks (project_id, fingerprint, timestamp, count, user_hash) VALUES
                 (999, '%1$s', '2026-11-24 10:00:01.000', 1, 11),
                 (999, '%1$s', '2026-11-24 10:00:30.000', 2, 11),
                 (999, '%1$s', '2026-11-24 10:00:59.999', 3, 22),
-                (999, '%1$s', '2026-11-24 10:01:00.000', 4, 33)
+                (999, '%1$s', '2026-11-24 10:01:00.000', 4, 33),
+                (999, '%1$s', '2026-11-24 10:01:30.000', 9, 0)
                 """.formatted(fingerprint));
 
         String rows = admin.execute("errdeck", """
@@ -89,7 +90,7 @@ class SchemaTest extends TestInfra {
 
         assertThat(rows.strip().split("\n")).containsExactly(
                 "2026-11-24 10:00:00\t6\t2",
-                "2026-11-24 10:01:00\t4\t1");
+                "2026-11-24 10:01:00\t13\t1");
         // Null 엔진이므로 건수 테이블 자체에는 아무것도 남지 않는다.
         assertThat(admin.execute("errdeck", "SELECT count() FROM event_ticks").strip()).isEqualTo("0");
     }

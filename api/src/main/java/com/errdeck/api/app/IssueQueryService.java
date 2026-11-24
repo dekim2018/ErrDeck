@@ -111,7 +111,8 @@ public class IssueQueryService {
         Instant to = clock.instant();
         Instant from = to.minus(period.length);
         IssueSummary summary = summarize(ref.projectId(), List.of(row), from, to).getFirst();
-        List<Bucket> trend = stats.trend(ref.projectId(), row.fingerprints(), from, to, period.bucket.toSeconds());
+        List<Bucket> trend = fill(stats.trend(ref.projectId(), row.fingerprints(), from, to, period.bucket.toSeconds()),
+                from, to, period.bucket);
         // 원본은 30일만 남는다(10.2). 기간과 상관없이 가장 최근 원본을 보여 준다.
         var latest = stats.latestEvent(ref.projectId(), row.fingerprints(), to.minus(Duration.ofDays(30)), to);
         return new IssueDetail(summary, row.resolvedInRelease(), row.ignoredUntil(), row.fingerprints(), trend,
@@ -121,6 +122,22 @@ public class IssueQueryService {
                 latest.map(EventStats.LatestEvent::traceId).filter(t -> !t.isBlank() && !t.chars().allMatch(c -> c == 0)).orElse(null),
                 issues.comments(issueId),
                 grafanaLink(issues.projectSlug(ref.projectId()), row.firstSeen()));
+    }
+
+    /**
+     * 발생이 없는 구간도 0으로 채운다. 그래야 막대 하나가 화면을 다 채우지 않고 기간 전체의 모양이 보인다.
+     * 구간의 시작은 ClickHouse 의 toStartOfInterval 과 같게 1970년부터 구간 길이로 자른 시각이다.
+     */
+    static List<Bucket> fill(List<Bucket> buckets, Instant from, Instant to, Duration bucket) {
+        Map<Instant, Long> byStart = new LinkedHashMap<>();
+        buckets.forEach(b -> byStart.put(b.start(), b.times()));
+        long size = bucket.toSeconds();
+        List<Bucket> filled = new ArrayList<>();
+        for (long t = Math.floorDiv(from.getEpochSecond(), size) * size; t < to.getEpochSecond(); t += size) {
+            Instant start = Instant.ofEpochSecond(t);
+            filled.add(new Bucket(start, byStart.getOrDefault(start, 0L)));
+        }
+        return filled;
     }
 
     private List<IssueSummary> summarize(long projectId, List<IssueRow> rows, Instant from, Instant to) {
