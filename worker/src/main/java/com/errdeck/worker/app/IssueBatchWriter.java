@@ -157,11 +157,14 @@ public class IssueBatchWriter implements BatchWriter {
 
         private List<IssueSeen> lastSeenPerIssue() {
             Map<Long, EventRow> latest = new LinkedHashMap<>();
+            Map<Long, Long> events = new HashMap<>();
             for (EventRow row : fresh) {
-                latest.merge(issueIds.get(key(row)), row, (a, b) -> b.timestamp().isAfter(a.timestamp()) ? b : a);
+                long issueId = issueIds.get(key(row));
+                latest.merge(issueId, row, (a, b) -> b.timestamp().isAfter(a.timestamp()) ? b : a);
+                events.merge(issueId, row.count(), Long::sum);
             }
             List<IssueSeen> seen = new ArrayList<>(latest.size());
-            latest.forEach((issueId, row) -> seen.add(new IssueSeen(issueId, row.timestamp(), row.release())));
+            latest.forEach((issueId, row) -> seen.add(new IssueSeen(issueId, row.timestamp(), row.release(), events.get(issueId))));
             return seen;
         }
     }

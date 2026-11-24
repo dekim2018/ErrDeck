@@ -9,6 +9,7 @@ import com.errdeck.core.event.Event;
 import com.errdeck.core.event.ExceptionInfo;
 import com.errdeck.core.fingerprint.Fingerprint;
 import com.errdeck.core.fingerprint.Fingerprinter;
+import com.errdeck.core.sourcemap.StackRestorer;
 import com.errdeck.worker.app.WorkerMetrics.Stage;
 import com.errdeck.worker.domain.EventRow;
 import com.errdeck.worker.domain.ProcessedEntry;
@@ -21,7 +22,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * 대기열 항목 하나를 저장할 행으로 바꾼다. 압축 해제, 해석, 지문 계산만 하고 I/O 는 하지 않는다(14.5).
+ * 대기열 항목 하나를 저장할 행으로 바꾼다. 압축 해제, 해석, 소스맵 복원, 지문 계산을 한다(6.1 의 2, 5, 6번).
+ * I/O 는 소스맵 캐시가 비었을 때 볼륨에서 읽는 것뿐이다(14.5, CHOICES 15-3).
  * 계산 풀의 스레드가 I/O 를 기다리면 DB가 느려질 때 계산 전체가 멈추기 때문이다.
  */
 public class EnvelopeProcessor {
@@ -30,11 +32,13 @@ public class EnvelopeProcessor {
 
     private final EnvelopeCodec codec;
     private final Fingerprinter fingerprinter;
+    private final StackRestorer restorer;
     private final WorkerMetrics metrics;
 
-    public EnvelopeProcessor(EnvelopeCodec codec, Fingerprinter fingerprinter, WorkerMetrics metrics) {
+    public EnvelopeProcessor(EnvelopeCodec codec, Fingerprinter fingerprinter, StackRestorer restorer, WorkerMetrics metrics) {
         this.codec = codec;
         this.fingerprinter = fingerprinter;
+        this.restorer = restorer;
         this.metrics = metrics;
     }
 
@@ -55,7 +59,9 @@ public class EnvelopeProcessor {
                 continue;
             }
             try {
-                rows.add(toRow(entry, Event.fromJson(item.payload())));
+                // 브라우저 스택은 지문을 만들기 전에 소스맵으로 되돌린다. 번들 이름은 빌드마다 바뀌어 지문에 쓸 수 없다(7.1).
+                StackRestorer.Result restored = restorer.restore(entry.projectId(), Event.fromJson(item.payload()));
+                rows.add(toRow(entry, restored.event(), restored.restored()));
             } catch (IllegalArgumentException e) {
                 // 이벤트 하나가 틀렸다고 봉투의 나머지까지 버리지 않는다. 다시 해도 같으므로 바로 격리한다.
                 quarantined.add(new Quarantine(entry.projectId(), item.payload(), "이벤트 형식: " + e.getMessage()));
@@ -65,7 +71,7 @@ public class EnvelopeProcessor {
         return new ProcessedEntry(entry.ref(), entry.receivedAt(), rows, quarantined);
     }
 
-    private EventRow toRow(QueueEntry entry, Event event) {
+    private EventRow toRow(QueueEntry entry, Event event, boolean restored) {
         Fingerprint fingerprint = fingerprinter.fingerprint(event);
         ExceptionInfo primary = event.primaryException();
         String message = event.message() != null ? event.message() : primary != null && primary.value() != null ? primary.value() : "";
@@ -84,7 +90,7 @@ public class EnvelopeProcessor {
                 userHash(event.userId()),
                 nullToEmpty(event.traceId()),
                 event.tags(),
-                false,
+                restored,
                 new String(event.toJson(), StandardCharsets.UTF_8),
                 event.count(),
                 title(primary, message),

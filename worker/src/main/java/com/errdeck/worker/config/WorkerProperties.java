@@ -18,6 +18,8 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * @param issueCacheSize       지문과 이슈의 대응을 기억할 개수
  * @param samplesPerIssuePerMinute 이슈별 분당 원본 저장 상한(10.3). 넘는 것은 건수만 남긴다
  * @param seenTtl              처리한 event_id 를 기억하는 시간(10.6)
+ * @param filesDir             소스맵 볼륨. api 와 같은 경로다(7.2)
+ * @param sourcemapCacheSize   해석한 소스맵 캐시의 바이트 상한(7.4)
  */
 @ConfigurationProperties("errdeck.worker")
 public record WorkerProperties(
@@ -38,5 +40,7 @@ public record WorkerProperties(
         int maxProcessAttempts,
         int issueCacheSize,
         int samplesPerIssuePerMinute,
-        Duration seenTtl) {
+        Duration seenTtl,
+        String filesDir,
+        org.springframework.util.unit.DataSize sourcemapCacheSize) {
 }

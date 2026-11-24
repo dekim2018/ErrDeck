@@ -29,6 +29,16 @@ public abstract class TestInfra {
     public static final GenericContainer<?> REDIS = startRedis();
     public static final GenericContainer<?> CLICKHOUSE = startClickHouse();
     public static final PostgreSQLContainer POSTGRES = startPostgres();
+    /** 소스맵 볼륨 대신 쓰는 임시 폴더. */
+    public static final java.nio.file.Path FILES = tempDir();
+
+    private static java.nio.file.Path tempDir() {
+        try {
+            return java.nio.file.Files.createTempDirectory("errdeck-artifacts");
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
 
     private static PostgreSQLContainer startPostgres() {
         PostgreSQLContainer container = new PostgreSQLContainer("postgres:17");
@@ -115,6 +125,7 @@ public abstract class TestInfra {
         registry.add("spring.data.redis.host", REDIS::getHost);
         registry.add("spring.data.redis.port", () -> REDIS.getMappedPort(6379));
         registry.add("errdeck.clickhouse.url", TestInfra::clickHouseUrl);
+        registry.add("errdeck.worker.files-dir", () -> FILES.toString());
         registry.add("spring.datasource.url", POSTGRES::getJdbcUrl);
         registry.add("spring.datasource.username", POSTGRES::getUsername);
         registry.add("spring.datasource.password", POSTGRES::getPassword);

@@ -3,7 +3,10 @@ package com.errdeck.worker.config;
 import com.errdeck.core.envelope.EnvelopeCodec;
 import com.errdeck.core.envelope.EnvelopeLimits;
 import com.errdeck.core.fingerprint.AppFrames;
+import com.errdeck.core.files.LocalArtifactStore;
 import com.errdeck.core.fingerprint.Fingerprinter;
+import com.errdeck.core.sourcemap.SourceMapCache;
+import com.errdeck.core.sourcemap.StackRestorer;
 import com.errdeck.worker.app.EnvelopeProcessor;
 import com.errdeck.worker.app.Pipeline;
 import com.errdeck.worker.app.WorkerMetrics;
@@ -50,9 +53,23 @@ public class WorkerConfig {
     }
 
     @Bean
-    EnvelopeProcessor envelopeProcessor(WorkerProperties properties, WorkerMetrics metrics) {
+    StackRestorer stackRestorer(WorkerProperties properties, io.micrometer.core.instrument.MeterRegistry registry) {
+        SourceMapCache<StackRestorer.ArtifactKey> cache = new SourceMapCache<>(properties.sourcemapCacheSize().toBytes());
+        StackRestorer restorer = new StackRestorer(new LocalArtifactStore(java.nio.file.Path.of(properties.filesDir())), cache);
+        // errdeck_sourcemap_cache_total{result}: 캐시 적중, 해석, 소스맵 없음(13.4)
+        io.micrometer.core.instrument.FunctionCounter.builder("errdeck.sourcemap.cache", cache, SourceMapCache::hits)
+                .tag("result", "hit").register(registry);
+        io.micrometer.core.instrument.FunctionCounter.builder("errdeck.sourcemap.cache", cache, SourceMapCache::loads)
+                .tag("result", "load").register(registry);
+        io.micrometer.core.instrument.FunctionCounter.builder("errdeck.sourcemap.cache", restorer, StackRestorer::missing)
+                .tag("result", "missing").register(registry);
+        return restorer;
+    }
+
+    @Bean
+    EnvelopeProcessor envelopeProcessor(WorkerProperties properties, StackRestorer restorer, WorkerMetrics metrics) {
         return new EnvelopeProcessor(new EnvelopeCodec(EnvelopeLimits.DEFAULT),
-                new Fingerprinter(new AppFrames(properties.inAppPackages())), metrics);
+                new Fingerprinter(new AppFrames(properties.inAppPackages())), restorer, metrics);
     }
 
     @Bean

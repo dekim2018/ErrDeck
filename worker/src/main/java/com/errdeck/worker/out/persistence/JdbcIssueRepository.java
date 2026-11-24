@@ -63,11 +63,11 @@ public class JdbcIssueRepository implements IssueRepository {
     public long createIssue(NewIssue issue) {
         Optional<Long> created = transactions.execute(status -> {
             long issueId = jdbc.sql("""
-                            INSERT INTO issues (project_id, title, culprit, first_seen, last_seen, last_release)
-                            VALUES (?, ?, ?, ?, ?, ?) RETURNING id
+                            INSERT INTO issues (project_id, title, culprit, first_seen, last_seen, last_release, first_release)
+                            VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id
                             """)
                     .params(issue.key().projectId(), issue.title(), issue.culprit(), Timestamp.from(issue.firstSeen()),
-                            Timestamp.from(issue.lastSeen()), emptyToNull(issue.release()))
+                            Timestamp.from(issue.lastSeen()), emptyToNull(issue.release()), emptyToNull(issue.release()))
                     .query(Long.class)
                     .single();
             int linked = jdbc.sql("""
@@ -91,22 +91,59 @@ public class JdbcIssueRepository implements IssueRepository {
                 .single();
     }
 
+    /**
+     * 이슈마다 최근 발생을 고치고 상태를 바꾼다(6.6).
+     *
+     * <ul>
+     *   <li>해결 → 재발: 해결한 릴리스보다 나중 릴리스에서 났을 때. 순서는 릴리스의 등록 시각(releases.created_at)으로 본다.
+     *       브라우저는 새로고침 전까지 옛 번들을 실행하므로 이전 릴리스에서 온 것은 재발로 치지 않는다.</li>
+     *   <li>무시 → 미해결: 기한이 지났거나 무시한 뒤의 발생 횟수가 조건에 닿았을 때.</li>
+     * </ul>
+     * 다른 worker 가 더 나중 시각으로 이미 고쳤으면 최근 발생과 최근 릴리스를 되돌리지 않는다.
+     */
     @Override
     public void touch(List<IssueSeen> seen) {
         if (seen.isEmpty()) {
             return;
         }
-        // 다른 worker 가 더 나중 시각으로 이미 고쳤으면 되돌리지 않는다.
         template.batchUpdate("""
-                        UPDATE issues
-                        SET last_seen = ?, last_release = COALESCE(?, last_release), updated_at = now()
-                        WHERE id = ? AND last_seen < ?
+                        UPDATE issues i SET
+                          last_release = CASE WHEN ? > i.last_seen THEN COALESCE(?, i.last_release) ELSE i.last_release END,
+                          last_seen = GREATEST(i.last_seen, ?),
+                          status = CASE
+                            WHEN i.status = 'resolved' AND (
+                                   i.resolved_in_release IS NULL OR ?::text IS NULL
+                                   OR (EXISTS (SELECT 1 FROM releases e WHERE e.project_id = i.project_id AND e.version = ?)
+                                       AND EXISTS (SELECT 1 FROM releases r WHERE r.project_id = i.project_id AND r.version = i.resolved_in_release)
+                                       AND (SELECT e.created_at FROM releases e WHERE e.project_id = i.project_id AND e.version = ?)
+                                         > (SELECT r.created_at FROM releases r WHERE r.project_id = i.project_id AND r.version = i.resolved_in_release))
+                                   OR (NOT EXISTS (SELECT 1 FROM releases e WHERE e.project_id = i.project_id AND e.version = ?)
+                                       AND ? <> i.resolved_in_release))
+                              THEN 'regressed'
+                            WHEN i.status = 'ignored' AND (
+                                   (i.ignored_until IS NOT NULL AND i.ignored_until <= now())
+                                   OR (i.ignored_until_count IS NOT NULL AND i.ignored_count + ? >= i.ignored_until_count))
+                              THEN 'unresolved'
+                            ELSE i.status
+                          END,
+                          ignored_count = CASE WHEN i.status = 'ignored' THEN i.ignored_count + ? ELSE i.ignored_count END,
+                          updated_at = now()
+                        WHERE i.id = ?
                         """,
                 seen, seen.size(), (ps, s) -> {
-                    ps.setTimestamp(1, Timestamp.from(s.lastSeen()));
-                    ps.setString(2, emptyToNull(s.release()));
-                    ps.setLong(3, s.issueId());
-                    ps.setTimestamp(4, Timestamp.from(s.lastSeen()));
+                    Timestamp lastSeen = Timestamp.from(s.lastSeen());
+                    String release = emptyToNull(s.release());
+                    ps.setTimestamp(1, lastSeen);
+                    ps.setString(2, release);
+                    ps.setTimestamp(3, lastSeen);
+                    ps.setString(4, release);
+                    ps.setString(5, release);
+                    ps.setString(6, release);
+                    ps.setString(7, release);
+                    ps.setString(8, release);
+                    ps.setLong(9, s.events());
+                    ps.setLong(10, s.events());
+                    ps.setLong(11, s.issueId());
                 });
         // 예전 릴리스의 이벤트가 늦게 와 최초 발생보다 이른 경우도 있다(브라우저의 옛 번들, 6.6).
         template.batchUpdate("UPDATE issues SET first_seen = ? WHERE id = ? AND first_seen > ?",
