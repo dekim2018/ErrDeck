@@ -1,0 +1,116 @@
+# 오라클 무료 서버(Arm 2코어, 12GB)용 덮어쓰기(17.4, 17.5).
+#
+#   cp .env.example .env   # 값을 채운다
+#   docker compose -f docker-compose.yml -f docker-compose.oci.yml --profile core --profile obs up -d --build
+#
+# 바꾸는 것: CPU 상한을 17.4 의 표대로 절반으로, worker 의 계산 풀 1, 비밀을 .env 에서, 저장소와 프로세스의 호스트 포트를 닫고
+# Caddy 하나만 80, 443 을 연다. 메모리 상한은 14.7 그대로다(12GB 에 넉넉하다).
+
+x-oci-env: &oci-env
+  ERRDECK_DB_PASSWORD: ${ERRDECK_DB_PASSWORD:?ERRDECK_DB_PASSWORD 를 .env 에 넣는다}
+  ERRDECK_CLICKHOUSE_PASSWORD: ${ERRDECK_CLICKHOUSE_PASSWORD:?}
+  ERRDECK_CLICKHOUSE_WORKER_PASSWORD: ${ERRDECK_CLICKHOUSE_WORKER_PASSWORD:?}
+  ERRDECK_CLICKHOUSE_API_PASSWORD: ${ERRDECK_CLICKHOUSE_API_PASSWORD:?}
+  ERRDECK_CONSOLE_URL: https://${ERRDECK_DOMAIN:?}
+  ERRDECK_UPTIME_ALLOWED_HOSTS: ""
+
+services:
+  postgres:
+    ports: !reset []
+    cpus: 0.5
+    environment:
+      POSTGRES_PASSWORD: ${ERRDECK_DB_PASSWORD:?}
+
+  redis:
+    ports: !reset []
+    cpus: 0.5
+
+  clickhouse:
+    ports: !reset []
+    cpus: 1.0
+    environment:
+      CLICKHOUSE_PASSWORD: ${ERRDECK_CLICKHOUSE_PASSWORD:?}
+    healthcheck:
+      test: ["CMD-SHELL", "clickhouse-client --user errdeck --password \"$$CLICKHOUSE_PASSWORD\" --query 'SELECT 1'"]
+
+  api:
+    ports: !reset []
+    cpus: 0.5
+    environment:
+      <<: *oci-env
+      ERRDECK_JWT_SECRET: ${ERRDECK_JWT_SECRET:?32바이트 이상}
+      ERRDECK_INTERNAL_SECRET: ${ERRDECK_INTERNAL_SECRET:?}
+      ERRDECK_SECURE_COOKIE: "true"
+      # 처음 계정을 만든 뒤 false 로 바꾼다(15.2).
+      ERRDECK_SIGNUP_ENABLED: ${ERRDECK_SIGNUP_ENABLED:-false}
+      ERRDECK_PUBLIC_INGEST_URL: https://${ERRDECK_DOMAIN}
+      ERRDECK_CONSOLE_ORIGINS: https://${ERRDECK_DOMAIN}
+      ERRDECK_GRAFANA_URL: https://${ERRDECK_DOMAIN}/grafana
+
+  ingest:
+    ports: !reset []
+    cpus: 0.5
+    environment:
+      <<: *oci-env
+      JAVA_OPTS: >-
+        -XX:ActiveProcessorCount=1 -Xms160m -Xmx160m -XX:+UseSerialGC -XX:+ExitOnOutOfMemoryError
+
+  worker:
+    cpus: 1.0
+    environment:
+      <<: *oci-env
+      # 코어가 하나라 계산 풀도 하나(17.4). 17 작업에서 2코어 값으로 4코어와 비슷한 처리량이 나왔다(EXPERIMENTS 18.3).
+      ERRDECK_WORKER_COMPUTETHREADS: 1
+      JAVA_OPTS: >-
+        -XX:ActiveProcessorCount=1 -Xms448m -Xmx448m -XX:+UseParallelGC -XX:+UseCompactObjectHeaders
+        -XX:+ExitOnOutOfMemoryError
+
+  prometheus:
+    ports: !reset []
+
+  alertmanager:
+    ports: !reset []
+    environment:
+      ERRDECK_INTERNAL_SECRET: ${ERRDECK_INTERNAL_SECRET:?}
+
+  grafana:
+    ports: !reset []
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${ERRDECK_GRAFANA_PASSWORD:?}
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_SERVER_ROOT_URL: https://${ERRDECK_DOMAIN}/grafana/
+      GF_SERVER_SERVE_FROM_SUB_PATH: "true"
+
+  postgres-exporter:
+    environment:
+      DATA_SOURCE_NAME: postgresql://errdeck:${ERRDECK_DB_PASSWORD}@postgres:5432/errdeck?sslmode=disable
+
+  # 서버의 유일한 입구. 콘솔 정적 파일을 함께 낸다(17.3).
+  caddy:
+    profiles: [core]
+    build:
+      context: .
+      dockerfile: deploy/caddy/Dockerfile
+    environment:
+      ERRDECK_DOMAIN: ${ERRDECK_DOMAIN:?}
+      ERRDECK_ACME_EMAIL: ${ERRDECK_ACME_EMAIL:?}
+      ERRDECK_AGENT_PASSWORD_HASH: ${ERRDECK_AGENT_PASSWORD_HASH:?caddy hash-password 로 만든다}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - caddy-data:/data
+    depends_on:
+      api: {condition: service_healthy}
+      ingest: {condition: service_healthy}
+    cpus: 0.25
+    mem_limit: 64m
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
+volumes:
+  caddy-data:

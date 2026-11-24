@@ -1,0 +1,44 @@
+# 서버의 유일한 입구(17.3). 인증서는 Caddy 가 자동으로 받는다(DuckDNS 도메인, 17.5).
+# 관리 포트(지표)와 저장소는 여기 연결하지 않는다(13.2).
+{
+	email {$ERRDECK_ACME_EMAIL}
+}
+
+{$ERRDECK_DOMAIN} {
+	encode gzip
+
+	# 감시 대상의 SDK 가 보내는 봉투. 브라우저 SDK 의 출처 확인은 ingest 가 한다(5.2).
+	handle /ingest/* {
+		reverse_proxy ingest:8080
+	}
+
+	handle /api/* {
+		reverse_proxy api:8081
+	}
+
+	# 다른 서버의 프로메테우스 에이전트가 밀어 보내는 지표(13.3, adr/0012). 기본 인증을 건다.
+	handle /prometheus/api/v1/write {
+		basic_auth {
+			agent {$ERRDECK_AGENT_PASSWORD_HASH}
+		}
+		uri strip_prefix /prometheus
+		reverse_proxy prometheus:9090
+	}
+
+	# 그라파나는 하위 경로로 낸다. 그라파나 자체 로그인을 쓴다.
+	handle /grafana* {
+		reverse_proxy grafana:3000
+	}
+
+	# 콘솔. 화면 경로는 모두 index.html 이 받는다.
+	handle {
+		root * /srv
+		try_files {path} /index.html
+		file_server
+	}
+
+	log {
+		output stdout
+		format console
+	}
+}
