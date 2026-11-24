@@ -21,3 +21,28 @@ jobs:
 
       - name: 빌드와 테스트
         run: ./gradlew build
+
+  # 콘솔 화면(12장). 타입 검사와 빌드, 단위 테스트.
+  web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: 의존성 설치
+        run: npm ci
+
+      - name: 타입 검사와 빌드
+        run: npm run build
+
+      - name: 테스트
+        run: npm test
+
