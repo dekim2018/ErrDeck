@@ -46,3 +46,27 @@ jobs:
       - name: 테스트
         run: npm test
 
+  # Vue SDK(11.3)와 그것을 붙인 데모 화면. 데모 화면은 SDK 의 빌드 결과를 쓰므로 SDK 를 먼저 빌드한다.
+  sdk-vue:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: SDK 의존성 설치, 테스트, 빌드
+        working-directory: sdk-vue
+        run: |
+          npm ci
+          npm test
+          npm run build
+          npm run size
+
+      - name: 데모 화면 빌드
+        working-directory: demo-web
+        run: |
+          npm ci
+          npm run build
+

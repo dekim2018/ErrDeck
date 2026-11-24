@@ -103,4 +103,8 @@ SDK를 붙인 것과 안 붙인 것의 요청 시간 차이, SDK 큐의 최대 �
 - **버린 이유**: client_report의 이유는 `queue_overflow`, `rate_limited`, `queue_full`, `too_large`, `network_error`, `unauthorized` 여섯 가지다.
 
 그 밖에 이 작업에서 정한 것은 [CHOICES.md](./CHOICES.md)의 09 절에 있다.
+- **Vue SDK의 구현**(14 작업): 코드는 `sdk-vue`(npm 패키지, 실행 의존성 없음, vue 는 peer)에 있다. `createErrDeck({ dsn, release, environment, router })` 를 `app.use` 로 붙인다. 번들은 9.6KB, gzip 3.8KB 다(목표 10KB 이하).
+- **압축하지 않은 봉투**: 탭을 떠날 때 `sendBeacon` 으로 보내는 봉투는 압축하지 않는다. worker 가 gzip 머리로 가린다(CHOICES 14-1).
+- **요청 정보**: 쿼리와 조각을 보내지 않는다(CHOICES 14-2). 앱 프레임 판정은 하지 않는다(14-3).
+- **확인**(커밋 464078d): 압축된 데모 화면(`vite preview`)에서 버튼 네 개를 누르자 봉투 하나가 POST 한 번(202)으로 갔고 OPTIONS 는 없었다. 이어서 탭을 떠나며 sendBeacon 으로 한 건을 더 보냈다. 다섯 건 모두 ClickHouse 에 저장되었고 격리는 없었다.
 

@@ -55,12 +55,18 @@ public final class EnvelopeCodec {
         return Gzip.compress(write(envelope));
     }
 
-    /** 압축된 본문을 풀고 읽는다. worker가 대기열에서 꺼낸 본문을 이것으로 읽는다. */
-    public Envelope decode(byte[] compressed) {
-        if (compressed.length > limits.maxCompressedBytes()) {
-            throw new EnvelopeTooLargeException("압축된 크기가 상한 " + limits.maxCompressedBytes() + "바이트를 넘는다");
+    /**
+     * 대기열에서 꺼낸 본문을 읽는다. gzip 이면 풀고, 아니면 그대로 읽는다. 브라우저가 탭을 닫을 때(sendBeacon) 보내는 봉투는
+     * 비동기인 압축을 거칠 수 없어 압축하지 않고 온다(11장 끝). 압축 여부는 gzip 머리(1f 8b)로 가린다.
+     */
+    public Envelope decode(byte[] body) {
+        if (body.length > limits.maxCompressedBytes()) {
+            throw new EnvelopeTooLargeException("본문 크기가 상한 " + limits.maxCompressedBytes() + "바이트를 넘는다");
         }
-        return read(Gzip.decompress(compressed, limits.maxDecompressedBytes()));
+        if (Gzip.isGzip(body)) {
+            return read(Gzip.decompress(body, limits.maxDecompressedBytes()));
+        }
+        return read(body);
     }
 
     /** 압축하지 않은 봉투 바이트를 읽는다. */

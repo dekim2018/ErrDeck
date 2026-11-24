@@ -15,6 +15,11 @@ public final class Gzip {
     private Gzip() {
     }
 
+    /** gzip 머리(1f 8b)로 시작하는지. */
+    public static boolean isGzip(byte[] data) {
+        return data.length >= 2 && (data[0] & 0xff) == 0x1f && (data[1] & 0xff) == 0x8b;
+    }
+
     public static byte[] compress(byte[] data) {
         ByteArrayOutputStream out = new ByteArrayOutputStream(Math.max(64, data.length / 4));
         try (GZIPOutputStream gzip = new GZIPOutputStream(out)) {
