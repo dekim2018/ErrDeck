@@ -30,6 +30,8 @@
 | 20 | [18-RISKS.md](./18-RISKS.md) | 위험 8개, 정해야 할 것, ADR 목록 |
 | | [adr/](./adr/README.md) | 결정 13개와 버린 대안 |
 | | [WORKFLOW.md](./WORKFLOW.md) | 작업 절차와 작업 목록 26개 |
+| | [CHOICES.md](./CHOICES.md) | 작업 중에 Claude가 추천안으로 정한 것. 나중에 검토하고 리팩토링할 목록 |
+| | [EXPERIMENTS.md](./EXPERIMENTS.md) | 부하, 자원, 장애 실험의 실측값 |
 
 ## 읽는 순서
 
