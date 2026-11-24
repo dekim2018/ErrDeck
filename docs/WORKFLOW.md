@@ -594,7 +594,7 @@ sleep 20 && curl -s http://localhost:8080/actuator/health; kill %1
 - [x] 05 정규화와 지문 규칙
 - [x] 06 저장소 스키마
 - [x] 07 worker 단계 구조와 역압
-- [ ] 08 이슈, 집계, 중복, 격리
+- [x] 08 이슈, 집계, 중복, 격리
 - [ ] 09 Starter SDK
 - [ ] 10 데모 앱
 - [ ] 11 로그인과 권한
