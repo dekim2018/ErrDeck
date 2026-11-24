@@ -8,6 +8,7 @@ import com.errdeck.worker.domain.NewIssue;
 import com.errdeck.worker.domain.ProcessedEntry;
 import com.errdeck.worker.domain.Quarantine;
 import com.errdeck.worker.domain.Tick;
+import com.errdeck.worker.domain.TransactionRow;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -64,6 +65,7 @@ public class IssueBatchWriter implements BatchWriter {
 
         private final List<EventRow> rows = new ArrayList<>();
         private final List<Quarantine> quarantined = new ArrayList<>();
+        private final List<TransactionRow> transactions = new ArrayList<>();
 
         private List<EventRow> fresh;
         private int duplicates;
@@ -72,6 +74,7 @@ public class IssueBatchWriter implements BatchWriter {
         private List<Tick> ticks;
         private boolean eventsWritten;
         private boolean ticksWritten;
+        private boolean transactionsWritten;
         private boolean seenMarked;
         private boolean touched;
         private boolean quarantineWritten;
@@ -80,6 +83,7 @@ public class IssueBatchWriter implements BatchWriter {
             batch.forEach(entry -> {
                 rows.addAll(entry.rows());
                 quarantined.addAll(entry.quarantined());
+                transactions.addAll(entry.transactions());
             });
         }
 
@@ -106,6 +110,14 @@ public class IssueBatchWriter implements BatchWriter {
                 store.writeTicks(ticks);
                 metrics.flushed("event_ticks", ticks.size(), System.nanoTime() - start);
                 ticksWritten = true;
+            }
+            if (!transactionsWritten) {
+                // 트랜잭션은 중복을 거르지 않는다. 다시 쓰는 일은 묶음 재시도뿐이고, 화면은 span_id 로 하나만 보여 준다.
+                long start = System.nanoTime();
+                store.writeTransactions(transactions);
+                metrics.flushed("transactions", transactions.size(), System.nanoTime() - start);
+                metrics.transactions(transactions.size());
+                transactionsWritten = true;
             }
             if (!seenMarked) {
                 seenEvents.markSeen(fresh.stream().map(EventRow::eventId).toList());

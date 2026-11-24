@@ -164,10 +164,10 @@ public class IssueQueryService {
     /** 최초 발생 시각의 앞뒤 15분으로 맞춘 그라파나 링크(12.4). 대시보드는 16 작업에서 만든다. */
     private String grafanaLink(String service, Instant at) {
         Map<String, String> query = new LinkedHashMap<>();
-        query.put("var-service", service);
+        query.put("var-job", service);
         query.put("from", Long.toString(at.minus(Duration.ofMinutes(15)).toEpochMilli()));
         query.put("to", Long.toString(at.plus(Duration.ofMinutes(15)).toEpochMilli()));
-        StringBuilder url = new StringBuilder(grafanaUrl.toString().replaceAll("/$", "")).append("/d/errdeck-jvm/jvm?");
+        StringBuilder url = new StringBuilder(grafanaUrl.toString().replaceAll("/$", "")).append("/d/errdeck-jvm?");
         query.forEach((k, v) -> url.append(k).append('=').append(java.net.URLEncoder.encode(v, java.nio.charset.StandardCharsets.UTF_8)).append('&'));
         return url.substring(0, url.length() - 1);
     }

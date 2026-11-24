@@ -6,6 +6,7 @@ import com.errdeck.core.envelope.EnvelopeException;
 import com.errdeck.core.envelope.EnvelopeItem;
 import com.errdeck.core.envelope.ItemType;
 import com.errdeck.core.event.Event;
+import com.errdeck.core.event.Transaction;
 import com.errdeck.core.event.ExceptionInfo;
 import com.errdeck.core.fingerprint.Fingerprint;
 import com.errdeck.core.fingerprint.Fingerprinter;
@@ -14,6 +15,7 @@ import com.errdeck.worker.app.WorkerMetrics.Stage;
 import com.errdeck.worker.domain.EventRow;
 import com.errdeck.worker.domain.ProcessedEntry;
 import com.errdeck.worker.domain.Quarantine;
+import com.errdeck.worker.domain.TransactionRow;
 import com.errdeck.worker.domain.QueueEntry;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -54,8 +56,17 @@ public class EnvelopeProcessor {
         start = System.nanoTime();
         List<EventRow> rows = new ArrayList<>();
         List<Quarantine> quarantined = new ArrayList<>();
+        List<TransactionRow> transactions = new ArrayList<>();
         for (EnvelopeItem item : envelope.items()) {
-            // 트랜잭션은 19 작업에서 저장한다. client_report 는 아직 저장할 곳이 없다(6장 끝).
+            if (item.type() == ItemType.TRANSACTION) {
+                try {
+                    transactions.add(new TransactionRow(entry.projectId(), entry.receivedAt(), Transaction.fromJson(item.payload())));
+                } catch (IllegalArgumentException e) {
+                    quarantined.add(new Quarantine(entry.projectId(), item.payload(), "트랜잭션 형식: " + e.getMessage()));
+                }
+                continue;
+            }
+            // client_report 는 아직 저장할 곳이 없다(6장 끝).
             if (item.type() != ItemType.EVENT) {
                 continue;
             }
@@ -73,7 +84,7 @@ public class EnvelopeProcessor {
         }
         metrics.stage(Stage.RESTORE, restoreNanos);
         metrics.stage(Stage.FINGERPRINT, System.nanoTime() - start - restoreNanos);
-        return new ProcessedEntry(entry.ref(), entry.receivedAt(), rows, quarantined);
+        return new ProcessedEntry(entry.ref(), entry.receivedAt(), rows, quarantined, transactions);
     }
 
     private EventRow toRow(QueueEntry entry, Event event, boolean restored) {

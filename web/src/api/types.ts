@@ -121,3 +121,134 @@ export interface ReleaseSummary {
   newIssues: number
   regressed: number
 }
+
+/** 성능 화면(12.3). source 가 samples 면 프로메테우스를 못 읽어 표본 트랜잭션으로 계산한 값이다. */
+export interface Endpoint {
+  name: string
+  requests: number
+  p95Ms: number
+  errorRate: number
+}
+
+export interface EndpointTable {
+  source: 'PROMETHEUS' | 'SAMPLES'
+  endpoints: Endpoint[]
+}
+
+export interface SpanView {
+  spanId: string
+  parentSpanId: string | null
+  op: string
+  description: string
+  startOffsetMs: number
+  durationMs: number
+  repeat: number
+}
+
+export interface TransactionView {
+  projectId: number
+  traceId: string
+  spanId: string
+  parentSpanId: string | null
+  name: string
+  op: string
+  timestamp: string
+  durationMs: number
+  status: string
+  partial: boolean
+  release: string
+  spans: SpanView[]
+}
+
+export type Signal = 'OK' | 'WARN' | 'DOWN'
+
+/** 요약 카드(12.2). 프로메테우스에 없으면 null. */
+export interface Card {
+  up: number | null
+  cpu: number | null
+  heap: number | null
+  p95Ms: number | null
+  errorRate: number | null
+  poolPending: number | null
+}
+
+export interface ProjectOverview {
+  id: number
+  slug: string
+  platform: string
+  signal: Signal
+  openIssues: number
+  regressed: number
+  newIssues24h: number
+  monitorsDown: number
+  monitors: number
+  card: Card | null
+  reasons: string[]
+}
+
+export interface SystemOverview {
+  id: number
+  name: string
+  role: string
+  signal: Signal
+  projects: ProjectOverview[]
+}
+
+export interface Overview {
+  systems: SystemOverview[]
+  metricsAvailable: boolean
+  grafanaUrl: string | null
+}
+
+export interface Monitor {
+  id: number
+  projectId: number
+  name: string | null
+  url: string
+  method: string
+  intervalSeconds: number
+  timeoutMs: number
+  expectedStatusMin: number
+  expectedStatusMax: number
+  expectedBody: string | null
+  status: 'unknown' | 'up' | 'down'
+  pausedUntil: string | null
+  lastCheckedAt: string | null
+  lastError: string | null
+  certExpiresAt: string | null
+  uptime24h: number | null
+  uptime30d: number | null
+  openIncidentSince: string | null
+}
+
+export interface Incident {
+  id: number
+  startedAt: string
+  endedAt: string | null
+  cause: string | null
+  grafanaUrl: string | null
+}
+
+export interface AlertRule {
+  id: number
+  projectId: number
+  kind: string
+  threshold: number | null
+  windowMinutes: number | null
+  channel: string
+  target: string
+  cooldownMinutes: number
+  enabled: boolean
+}
+
+export interface NotificationView {
+  id: number
+  ruleId: number
+  kind: string
+  title: string
+  status: 'pending' | 'sent' | 'failed'
+  attempts: number
+  lastError: string | null
+  createdAt: string
+  sentAt: string | null
+}

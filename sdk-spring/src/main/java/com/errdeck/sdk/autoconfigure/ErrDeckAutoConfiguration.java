@@ -1,5 +1,11 @@
 package com.errdeck.sdk.autoconfigure;
 
+import com.errdeck.sdk.tracing.ErrDeckTracer;
+import com.errdeck.sdk.tracing.TracingClientInterceptor;
+import com.errdeck.sdk.tracing.TracingDataSource;
+import com.errdeck.sdk.web.ErrDeckTracingFilter;
+import com.errdeck.sdk.webflux.ErrDeckTracingWebFilter;
+import java.time.Duration;
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.LoggerContext;
 import com.errdeck.core.dsn.Dsn;
@@ -64,6 +70,48 @@ public class ErrDeckAutoConfiguration {
         return client;
     }
 
+    /** 성능 추적(8장). {@code errdeck.tracing.enabled=false} 면 끈다. */
+    @Bean(destroyMethod = "close")
+    @ConditionalOnMissingBean
+    @ConditionalOnBooleanProperty(name = "errdeck.tracing.enabled", matchIfMissing = true)
+    public ErrDeckTracer errDeckTracer(ErrDeckProperties properties) {
+        ErrDeckTracer.Options defaults = ErrDeckTracer.Options.defaults(properties.environment(), properties.release());
+        ErrDeckProperties.Tracing t = properties.tracing() == null ? new ErrDeckProperties.Tracing(null, null, null, null) : properties.tracing();
+        ErrDeckTracer.Options options = new ErrDeckTracer.Options(defaults.environment(), defaults.release(),
+                or(t.sampleRate(), defaults.sampleRate()), or(t.slowThreshold(), defaults.slowThreshold()),
+                or(t.tailSampling(), defaults.tailSampling()), defaults.queueCapacity(), defaults.batchSize(), defaults.flushInterval(),
+                defaults.shutdownFlush());
+        Dsn dsn = Dsn.parse(properties.dsn());
+        Duration timeout = or(properties.timeout(), ErrDeckOptions.defaults(dsn).timeout());
+        return new ErrDeckTracer(options, new HttpTransport(dsn, timeout, true), Clock.systemUTC());
+    }
+
+    /**
+     * 나가는 HTTP 호출(RestClient, RestTemplate)에 {@code traceparent} 를 붙이고, DataSource 를 감싸 SQL 을 스팬으로 남긴다(8.3).
+     * 스프링 부트의 모듈에 기대지 않으려고 빈 후처리기로 붙인다.
+     */
+    @Bean
+    @ConditionalOnBooleanProperty(name = "errdeck.tracing.enabled", matchIfMissing = true)
+    public static BeanPostProcessor errDeckTracingInstrumentation() {
+        return new BeanPostProcessor() {
+            @Override
+            public Object postProcessAfterInitialization(Object bean, String beanName) {
+                if (bean instanceof javax.sql.DataSource dataSource && !(bean instanceof org.springframework.beans.factory.FactoryBean<?>)) {
+                    return TracingDataSource.wrap(dataSource);
+                }
+                if (CLIENTS_PRESENT && bean instanceof org.springframework.web.client.RestClient.Builder builder) {
+                    builder.requestInterceptor(new TracingClientInterceptor());
+                } else if (CLIENTS_PRESENT && bean instanceof org.springframework.web.client.RestTemplate template) {
+                    template.getInterceptors().add(new TracingClientInterceptor());
+                }
+                return bean;
+            }
+        };
+    }
+
+    private static final boolean CLIENTS_PRESENT =
+            org.springframework.util.ClassUtils.isPresent("org.springframework.web.client.RestClient", ErrDeckAutoConfiguration.class.getClassLoader());
+
     /** 다른 스레드에서 잡히지 않은 예외. 원래 핸들러는 그대로 부른다. 종료할 때 되돌린다. */
     @Bean
     public UncaughtExceptions errDeckUncaughtExceptions(ErrDeckClient client) {
@@ -123,6 +171,12 @@ public class ErrDeckAutoConfiguration {
         public ErrDeckServletFilter errDeckServletFilter(ErrDeckClient client) {
             return new ErrDeckServletFilter(client);
         }
+
+        @Bean
+        @ConditionalOnBooleanProperty(name = "errdeck.tracing.enabled", matchIfMissing = true)
+        public ErrDeckTracingFilter errDeckTracingFilter(ErrDeckTracer tracer) {
+            return new ErrDeckTracingFilter(tracer);
+        }
     }
 
     @Configuration(proxyBeanMethods = false)
@@ -133,6 +187,12 @@ public class ErrDeckAutoConfiguration {
         @Bean
         public ErrDeckWebFilter errDeckWebFilter(ErrDeckClient client) {
             return new ErrDeckWebFilter(client);
+        }
+
+        @Bean
+        @ConditionalOnBooleanProperty(name = "errdeck.tracing.enabled", matchIfMissing = true)
+        public ErrDeckTracingWebFilter errDeckTracingWebFilter(ErrDeckTracer tracer) {
+            return new ErrDeckTracingWebFilter(tracer);
         }
     }
 

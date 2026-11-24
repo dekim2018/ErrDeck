@@ -154,3 +154,33 @@ ol.context .ln { color: var(--muted); min-width: 32px; text-align: right; user-s
 .tabs { display: flex; gap: 16px; margin: 4px 0 12px; border-bottom: 1px solid var(--border); }
 .tabs a { padding: 6px 0; color: var(--muted); border-bottom: 2px solid transparent; }
 .tabs a.router-link-exact-active { color: var(--text); border-bottom-color: var(--accent); text-decoration: none; }
+
+/* 성능 화면과 추적 그림(12.3) */
+tr.clickable { cursor: pointer; }
+tr.selected td { background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.badge { display: inline-block; margin-left: 6px; padding: 0 6px; border-radius: 8px; font-size: 11px; border: 1px solid var(--border); color: var(--muted); }
+.badge.warn { color: var(--warn); border-color: var(--warn); }
+.waterfall { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; }
+.wf-row { display: grid; grid-template-columns: minmax(220px, 40%) 1fr; border-bottom: 1px solid var(--border); font-size: 12px; }
+.wf-row.tx { font-weight: 600; }
+.wf-label { padding: 4px 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wf-track { position: relative; height: 22px; margin: 0 56px 0 4px; }
+.wf-bar { position: absolute; top: 6px; height: 10px; border-radius: 2px; background: var(--bar); }
+.wf-row.span .wf-bar { background: color-mix(in srgb, var(--bar) 55%, transparent); }
+.wf-bar.error { background: var(--danger); }
+.wf-time { position: absolute; right: -52px; top: 4px; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+/* 통합 화면(12장)과 모니터 */
+.system-card { margin-bottom: 20px; }
+.system-card header { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.system-card h2 { margin: 0; }
+.signal { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 12px; color: #fff; background: var(--neutral); }
+.signal[data-signal='OK'] { background: var(--ok); }
+.signal[data-signal='WARN'] { background: var(--warn); }
+.signal[data-signal='DOWN'] { background: var(--danger); }
+.signal.dot { width: 9px; height: 9px; padding: 0; margin-right: 6px; border-radius: 50%; vertical-align: middle; }
+.small { font-size: 12px; }
+.actions { white-space: nowrap; text-align: right; }
+.actions button { margin-left: 4px; }
+.incidents { margin: 0; padding-left: 18px; font-size: 12px; }
+.incidents a { margin-left: 8px; }

@@ -219,6 +219,7 @@ class IssueBatchWriterTest {
     }
 
     private static final class MemoryStore implements EventStore {
+        final List<com.errdeck.worker.domain.TransactionRow> transactions = new java.util.ArrayList<>();
         final List<EventRow> events = new ArrayList<>();
         final List<Tick> ticks = new ArrayList<>();
         int ticksFailures;
@@ -236,6 +237,11 @@ class IssueBatchWriterTest {
                 throw new IllegalStateException("ClickHouse 일시 실패");
             }
             ticks.addAll(rows);
+        }
+
+        @Override
+        public void writeTransactions(List<com.errdeck.worker.domain.TransactionRow> rows) {
+            transactions.addAll(rows);
         }
     }
 }

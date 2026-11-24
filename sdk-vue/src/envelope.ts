@@ -1,3 +1,4 @@
+import type { ErrDeckTransaction } from './tracing'
 import type { ErrDeckEvent } from './types'
 
 export const SDK = 'vue/0.1.0'
@@ -13,12 +14,13 @@ const encoder = new TextEncoder()
 /**
  * 줄 단위 JSON 봉투(5.3). 항목 머리 줄의 length 는 본문의 UTF-8 바이트 수다. 한글 메시지가 있어도 core 가 같은 경계로 자른다.
  */
-export function envelope(events: ErrDeckEvent[], discarded: Discarded[], now: Date = new Date()): Uint8Array {
+export function envelope(events: ErrDeckEvent[], discarded: Discarded[], now: Date = new Date(), transactions: ErrDeckTransaction[] = []): Uint8Array {
   const parts: string[] = [JSON.stringify({ sdk: SDK, sent_at: now.toISOString() })]
   const add = (type: string, body: string) => {
     parts.push(JSON.stringify({ type, length: encoder.encode(body).length }), body)
   }
   for (const event of events) add('event', JSON.stringify(event))
+  for (const tx of transactions) add('transaction', JSON.stringify(tx))
   if (discarded.length) add('client_report', JSON.stringify({ timestamp: now.toISOString(), discarded }))
   return encoder.encode(parts.join('\n') + '\n')
 }

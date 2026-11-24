@@ -82,6 +82,14 @@ public final class FakeIngest implements AutoCloseable {
                 .toList();
     }
 
+    public List<com.errdeck.core.event.Transaction> transactions() {
+        return envelopes.stream().flatMap(e -> e.items().stream())
+                .filter(item -> item.type() == ItemType.TRANSACTION)
+                .map(EnvelopeItem::payload)
+                .map(com.errdeck.core.event.Transaction::fromJson)
+                .toList();
+    }
+
     /** 받은 이벤트가 대표하는 발생 횟수의 합. 접힌 것은 count 로 센다. */
     public long eventCount() {
         return events().stream().mapToLong(Event::count).sum();

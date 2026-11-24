@@ -58,7 +58,7 @@ class SchemaTest extends TestInfra {
     @Test
     void ClickHouse에_테이블_5개와_구체화_뷰와_실행_기록이_만들어진다() {
         assertThat(clickHouseTables()).containsExactlyElementsOf(CLICKHOUSE_TABLES);
-        assertThat(migrator.appliedVersions()).containsExactlyInAnyOrder(1, 2, 3, 4, 5, 6, 7, 8);
+        assertThat(migrator.appliedVersions()).containsExactlyInAnyOrder(1, 2, 3, 4, 5, 6, 7, 8, 9);
     }
 
     @Test
@@ -67,7 +67,7 @@ class SchemaTest extends TestInfra {
 
         assertThat(ran).isEmpty();
         assertThat(clickHouseTables()).containsExactlyElementsOf(CLICKHOUSE_TABLES);
-        assertThat(admin.execute("errdeck", "SELECT count() FROM schema_migrations").strip()).isEqualTo("8");
+        assertThat(admin.execute("errdeck", "SELECT count() FROM schema_migrations").strip()).isEqualTo("9");
     }
 
     @Test

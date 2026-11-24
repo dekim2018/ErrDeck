@@ -17,7 +17,12 @@ public final class HttpTransport implements Transport {
     private final Duration timeout;
 
     public HttpTransport(Dsn dsn, Duration timeout) {
-        this.uri = dsn.envelopeUri();
+        this(dsn, timeout, false);
+    }
+
+    /** @param transactions true 면 트랜잭션 대기열로 보낸다({@code ?kind=tx}, 5.4). 에러가 트랜잭션에 밀리지 않게 나눈다 */
+    public HttpTransport(Dsn dsn, Duration timeout, boolean transactions) {
+        this.uri = transactions ? java.net.URI.create(dsn.envelopeUri() + "?kind=tx") : dsn.envelopeUri();
         this.key = dsn.publicKey();
         this.timeout = timeout;
         this.client = HttpClient.newBuilder()

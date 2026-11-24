@@ -19,7 +19,9 @@ public class ApiException extends RuntimeException {
         /** 400. 요청 값이 틀렸다. */
         BAD_REQUEST,
         /** 429. 동시 재발급처럼 잠시 뒤 다시 하면 되는 것. */
-        RETRY
+        RETRY,
+        /** 503. 조회가 몰려 자리가 없다. 기다리게 하지 않고 바로 거절한다(14.4). */
+        UNAVAILABLE
     }
 
     private final Kind kind;

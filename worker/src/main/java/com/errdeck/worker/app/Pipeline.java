@@ -15,6 +15,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.Semaphore;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
@@ -50,7 +52,12 @@ public class Pipeline {
     private final Clock clock;
 
     private final Map<QueueStream, BlockingQueue<QueueEntry>> handoff = new EnumMap<>(QueueStream.class);
-    private final BlockingQueue<ProcessedEntry> writeQueue;
+    private final BlockingQueue<ProcessedEntry> writeQueue = new LinkedBlockingQueue<>();
+    /**
+     * 쓰기 큐의 길이는 봉투 수가 아니라 이벤트 수로 묶는다(14.5 의 10,000건). 봉투 하나에 이벤트가 50건까지 들어서
+     * 봉투 수로 묶으면 힙에 50배가 쌓인다. 처음에는 봉투 수로 묶어 20건짜리 봉투의 밀린 대기열에서 힙이 넘쳤다(EXPERIMENTS 17 작업).
+     */
+    private final Semaphore writeRows;
     /** 읽었지만 아직 확인 처리하지 않은 항목. 이어받기가 자기 손에 있는 항목을 두 번 넣지 않게 한다. */
     private final Set<EntryRef> inFlight = ConcurrentHashMap.newKeySet();
 
@@ -75,7 +82,7 @@ public class Pipeline {
         for (QueueStream stream : QueueStream.values()) {
             handoff.put(stream, new ArrayBlockingQueue<>(properties.handoffCapacity()));
         }
-        this.writeQueue = new ArrayBlockingQueue<>(properties.writeQueueCapacity());
+        this.writeRows = new Semaphore(properties.writeQueueCapacity());
     }
 
     public synchronized void start() {
@@ -119,16 +126,37 @@ public class Pipeline {
     private void readLoop(QueueStream stream) {
         BlockingQueue<QueueEntry> queue = handoff.get(stream);
         Instant nextClaim = clock.instant().plus(properties.claimInterval());
+        // 이어받기를 한 번 시작하면 미확인 목록을 끝까지 쪽마다 넘겨 본다. 한 번에 한 쪽(500건)만 가져오면
+        // 읽기 제한 시간으로 받지 못한 항목 1만 건을 되찾는 데 10분이 걸렸다(EXPERIMENTS 17 작업).
+        String claimCursor = null;
+        // 읽기가 제한 시간을 넘기면 Redis 는 항목을 넘겼는데 이 worker 는 못 받았을 수 있다. 자기 미확인 목록을 처음부터 다시 읽는다.
+        // 이것이 없으면 이어받기의 최소 대기(60초)까지 그 항목들이 멈춘다(EXPERIMENTS 17 작업).
+        String ownCursor = null;
         try {
             while (reading) {
                 try {
-                    if (!clock.instant().isBefore(nextClaim)) {
-                        nextClaim = clock.instant().plus(properties.claimInterval());
-                        enqueue(queue, source.claim(stream, properties.claimMinIdle(), properties.readCount()));
+                    if (ownCursor != null) {
+                        List<QueueEntry> own = source.readOwn(stream, properties.readCount(), ownCursor);
+                        enqueue(queue, own);
+                        ownCursor = own.isEmpty() ? null : own.getLast().id();
+                        continue;
+                    }
+                    if (claimCursor != null || !clock.instant().isBefore(nextClaim)) {
+                        QueueSource.Claimed claimed = source.claim(stream, properties.claimMinIdle(), properties.readCount(),
+                                claimCursor == null ? QueueSource.CLAIM_START : claimCursor);
+                        enqueue(queue, claimed.entries());
+                        claimCursor = claimed.finished() ? null : claimed.next();
+                        if (claimCursor == null) {
+                            nextClaim = clock.instant().plus(properties.claimInterval());
+                        } else {
+                            // 남은 쪽을 먼저 넘긴다. 새 항목 읽기는 기다리는 명령이라 그동안 이어받기가 늦어진다.
+                            continue;
+                        }
                     }
                     enqueue(queue, source.read(stream, properties.readCount(), properties.readBlock()));
                 } catch (RuntimeException e) {
                     log.warn("{} 대기열을 읽지 못했다: {}", stream, e.toString());
+                    ownCursor = QueueSource.CLAIM_START;
                     sleep(Duration.ofSeconds(1));
                 }
             }
@@ -169,11 +197,15 @@ public class Pipeline {
                 }
                 ProcessedEntry processed = processWithRetry(entry);
                 // 쓰기 큐가 차면 여기서 멈춘다. 계산이 멈추면 넘겨주기 큐가 차고 읽기가 멈춘다.
-                while (!writeQueue.offer(processed, POLL_MILLIS, TimeUnit.MILLISECONDS)) {
+                boolean admitted = false;
+                while (!(admitted = writeRows.tryAcquire(weight(processed), POLL_MILLIS, TimeUnit.MILLISECONDS))) {
                     if (pastGiveUp()) {
                         inFlight.remove(processed.ref());
                         break;
                     }
+                }
+                if (admitted) {
+                    writeQueue.add(processed);
                 }
             }
         } catch (InterruptedException e) {
@@ -209,6 +241,7 @@ public class Pipeline {
             while (true) {
                 ProcessedEntry entry = writeQueue.poll(POLL_MILLIS, TimeUnit.MILLISECONDS);
                 if (entry != null) {
+                    writeRows.release(weight(entry));
                     if (batch.isEmpty()) {
                         batchStart = clock.instant();
                     }
@@ -282,6 +315,11 @@ public class Pipeline {
 
     private boolean handoffEmpty() {
         return handoff.values().stream().allMatch(BlockingQueue::isEmpty);
+    }
+
+    /** 쓰기 큐에서 차지하는 자리. 이벤트 수이고, 큐 전체보다 큰 봉투도 들어갈 수 있게 상한을 둔다. */
+    private int weight(ProcessedEntry entry) {
+        return Math.min(properties.writeQueueCapacity(), Math.max(1, entry.rows().size() + entry.quarantined().size() + entry.transactions().size()));
     }
 
     private boolean pastGiveUp() {

@@ -96,7 +96,7 @@ class IssueQueryTest extends TestInfra {
         assertThat(detail.get("latestEnvironment")).isEqualTo("prod");
         assertThat(((Map<?, ?>) detail.get("latestEvent")).get("exceptions")).isInstanceOf(List.class);
         assertThat(((List<?>) detail.get("trend"))).isNotEmpty();
-        assertThat((String) detail.get("grafanaUrl")).contains("/d/errdeck-jvm/jvm?var-service=p-");
+        assertThat((String) detail.get("grafanaUrl")).contains("/d/errdeck-jvm?var-job=p-");
     }
 
     @Test

@@ -19,8 +19,8 @@ spring:
     redis:
       host: ${ERRDECK_REDIS_HOST:localhost}
       port: ${ERRDECK_REDIS_PORT:16379}
-      # 읽기는 최대 1초 기다리는 블로킹 호출이므로 그보다 길게 둔다.
-      timeout: 3s
+      # 읽기는 최대 1초 기다리는 블로킹 호출이므로 그보다 길게 둔다. 3초로는 시작 직후의 GC 멈춤(3.1초)에 걸려 5초로 늘렸다.
+      timeout: 5s
       connect-timeout: 1s
   lifecycle:
     # 읽기를 멈추고 처리 중인 묶음을 쓰고 확인 처리하는 데 주는 시간(17.6)
@@ -49,6 +49,7 @@ errdeck:
     handoff-capacity: 2000
     compute-threads: 2
     events-per-transaction: 3
+    # 봉투 수가 아니라 이벤트 수다. 봉투 하나에 50건까지 든다.
     write-queue-capacity: 10000
     batch-max-rows: 5000
     batch-max-wait: 1s
@@ -73,3 +74,8 @@ errdeck:
     user: errdeck_worker
     password: ${ERRDECK_CLICKHOUSE_WORKER_PASSWORD:errdeck_worker}
     timeout: 10s
+  # 알림 메시지의 링크가 가리키는 콘솔 주소(16.3).
+  console-url: ${ERRDECK_CONSOLE_URL:http://localhost:5173}
+  uptime:
+    # 내부 주소지만 점검과 웹훅을 허용할 호스트(9.4). 쉼표로 나눈다. 로컬 개발은 같은 도커 네트워크의 데모 앱.
+    allowed-hosts: ${ERRDECK_UPTIME_ALLOWED_HOSTS:}

@@ -1,5 +1,8 @@
 package com.errdeck.sdk;
 
+import com.errdeck.core.envelope.EnvelopeItem;
+import com.errdeck.core.envelope.ItemType;
+import com.errdeck.sdk.tracing.Tracing;
 import com.errdeck.sdk.transport.DiscardReason;
 import com.errdeck.sdk.transport.Discards;
 import com.errdeck.sdk.transport.Sender;
@@ -44,7 +47,8 @@ public final class ErrDeckClient implements AutoCloseable {
         this.queue = new ArrayBlockingQueue<>(options.queueCapacity());
         this.folder = new Folder(options.foldWindow(), options.foldThreshold(), clock);
         EventBuilder builder = new EventBuilder(options);
-        this.sender = new Sender<>(queue, folder::drainFolded, builder::build, Capture::count, transport, discards, clock,
+        this.sender = new Sender<>(queue, folder::drainFolded,
+                c -> new EnvelopeItem(ItemType.EVENT, builder.build(c).toJson()), Capture::count, transport, discards, clock,
                 options.batchSize(), options.flushInterval());
         this.thread = Thread.ofPlatform().daemon().name("errdeck-sender").start(this::loop);
     }
@@ -64,7 +68,7 @@ public final class ErrDeckClient implements AutoCloseable {
             if (!folder.admit(throwable, request)) {
                 return;
             }
-            Capture capture = new Capture(UUID.randomUUID(), clock.instant(), throwable, request, 1);
+            Capture capture = new Capture(UUID.randomUUID(), clock.instant(), throwable, request, 1, Tracing.currentTraceId());
             if (!queue.offer(capture)) {
                 discards.add(DiscardReason.QUEUE_OVERFLOW, 1);
             }

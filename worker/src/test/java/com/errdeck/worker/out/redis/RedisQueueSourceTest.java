@@ -2,6 +2,7 @@ package com.errdeck.worker.out.redis;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.errdeck.worker.app.QueueSource;
 import com.errdeck.worker.domain.QueueEntry;
 import com.errdeck.worker.domain.QueueStream;
 import com.errdeck.worker.support.TestInfra;
@@ -75,7 +76,7 @@ class RedisQueueSourceTest extends TestInfra {
         readAs("dead-worker");
 
         Thread.sleep(50);
-        List<QueueEntry> claimed = source.claim(QueueStream.EVENTS, Duration.ofMillis(10), 100);
+        List<QueueEntry> claimed = source.claim(QueueStream.EVENTS, Duration.ofMillis(10), 100, QueueSource.CLAIM_START).entries();
 
         assertThat(claimed).hasSize(1);
         assertThat(claimed.getFirst().body()).isEqualTo(body);
@@ -86,13 +87,57 @@ class RedisQueueSourceTest extends TestInfra {
     }
 
     @Test
+    void 미확인_목록을_쪽마다_넘겨_끝까지_이어받는다() throws Exception {
+        RedisQueueSource source = new RedisQueueSource(factory, group, "me");
+        source.ensureGroups();
+        for (int i = 0; i < 7; i++) {
+            add(7, new byte[] {(byte) i});
+        }
+        readAs("dead-worker");
+        Thread.sleep(50);
+
+        List<QueueEntry> all = new java.util.ArrayList<>();
+        String cursor = QueueSource.CLAIM_START;
+        int pages = 0;
+        do {
+            QueueSource.Claimed page = source.claim(QueueStream.EVENTS, Duration.ofMillis(10), 3, cursor);
+            all.addAll(page.entries());
+            cursor = page.next();
+            pages++;
+        } while (!QueueSource.CLAIM_START.equals(cursor) && pages < 10);
+
+        assertThat(all).hasSize(7);
+        assertThat(pages).isEqualTo(3);
+        source.close();
+    }
+
+    @Test
+    void 받지_못한_자기_미확인_항목을_바로_다시_읽는다() {
+        RedisQueueSource source = new RedisQueueSource(factory, group, "me");
+        source.ensureGroups();
+        for (int i = 0; i < 5; i++) {
+            add(7, new byte[] {(byte) i});
+        }
+        readAs("me");
+        readAs("other");
+
+        List<QueueEntry> first = source.readOwn(QueueStream.EVENTS, 3, QueueSource.CLAIM_START);
+        List<QueueEntry> rest = source.readOwn(QueueStream.EVENTS, 3, first.getLast().id());
+
+        assertThat(first).hasSize(3);
+        assertThat(rest).hasSize(2);
+        assertThat(source.readOwn(QueueStream.EVENTS, 3, rest.getLast().id())).isEmpty();
+        source.close();
+    }
+
+    @Test
     void 기다린_시간이_짧은_미확인_항목은_이어받지_않는다() {
         RedisQueueSource source = new RedisQueueSource(factory, group, "me");
         source.ensureGroups();
         add(7, new byte[] {1});
         readAs("busy-worker");
 
-        assertThat(source.claim(QueueStream.EVENTS, Duration.ofMinutes(1), 100)).isEmpty();
+        assertThat(source.claim(QueueStream.EVENTS, Duration.ofMinutes(1), 100, QueueSource.CLAIM_START).entries()).isEmpty();
         source.close();
     }
 

@@ -12,7 +12,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Alertmanager 의 웹훅을 받는 곳(13.6, 15.1). 공유 비밀 체인 뒤에 있다. 받은 경보를 알림으로 보내는 일은 21 작업에서 한다.
+ * Alertmanager 의 웹훅을 받는 곳(13.6, 15.1). 공유 비밀 체인 뒤에 있다. 받은 경보는 'resource' 규칙의 알림으로 넘긴다(21 작업).
  */
 @RestController
 public class InternalController {
@@ -20,9 +20,14 @@ public class InternalController {
     private static final Logger log = LoggerFactory.getLogger(InternalController.class);
 
     private final MeterRegistry registry;
+    private final com.errdeck.api.app.OpsService ops;
+    private final org.springframework.data.redis.core.StringRedisTemplate redis;
 
-    public InternalController(MeterRegistry registry) {
+    public InternalController(MeterRegistry registry, com.errdeck.api.app.OpsService ops,
+                              org.springframework.data.redis.core.StringRedisTemplate redis) {
         this.registry = registry;
+        this.ops = ops;
+        this.redis = redis;
     }
 
     @PostMapping("/api/internal/alerts")
@@ -37,6 +42,13 @@ public class InternalController {
                 // 경보 이름은 규칙 파일의 8개뿐이라 태그로 넣어도 시계열이 늘지 않는다(13.4).
                 registry.counter("errdeck.alerts.received", "alertname", name, "status", status).increment();
             }
+        }
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> maps = (List<Map<String, Object>>) (List<?>) alerts.stream().filter(a -> a instanceof Map<?, ?>).toList();
+        try {
+            ops.alertmanager(maps, redis);
+        } catch (RuntimeException e) {
+            log.warn("경보를 알림으로 넘기지 못했다: {}", e.toString());
         }
     }
 }

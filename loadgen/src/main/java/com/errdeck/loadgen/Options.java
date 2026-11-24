@@ -16,6 +16,7 @@ import java.util.Map;
  * @param batch        봉투 하나에 담을 이벤트 수. Spring SDK 는 최대 50건을 묶는다(11.2)
  * @param maxInFlight  응답을 기다리는 요청의 상한. 넘으면 보내지 않고 건수만 센다. 도구가 먼저 쓰러지지 않게 한다
  * @param timeout      요청 하나의 제한 시간. SDK 와 같은 3초다(14.9)
+ * @param bearer       http 시나리오에서 Authorization 헤더로 보낼 토큰. 콘솔 API 를 부를 때 쓴다. 없으면 보내지 않는다
  */
 public record Options(
         Scenario scenario,
@@ -26,7 +27,8 @@ public record Options(
         int fingerprints,
         int batch,
         int maxInFlight,
-        Duration timeout) {
+        Duration timeout,
+        String bearer) {
 
     static final String USAGE = """
             사용법: loadgen <sustained|burst> --dsn=<DSN> [옵션]
@@ -37,6 +39,7 @@ public record Options(
               --batch=1            봉투 하나에 담을 이벤트 수
               --max-in-flight=2000 응답을 기다리는 요청의 상한
               --timeout=3s         요청 하나의 제한 시간
+              --bearer=<토큰>      http 만. Authorization: Bearer 로 보낼 토큰
             """;
 
     public Options {
@@ -82,8 +85,9 @@ public record Options(
                 Integer.parseInt(values.getOrDefault("fingerprints", "1000")),
                 Integer.parseInt(values.getOrDefault("batch", "1")),
                 Integer.parseInt(values.getOrDefault("max-in-flight", "2000")),
-                parseDuration(values.getOrDefault("timeout", "3s")));
-        for (String known : new String[] {"rate", "duration", "fingerprints", "batch", "max-in-flight", "timeout"}) {
+                parseDuration(values.getOrDefault("timeout", "3s")),
+                values.get("bearer"));
+        for (String known : new String[] {"rate", "duration", "fingerprints", "batch", "max-in-flight", "timeout", "bearer"}) {
             values.remove(known);
         }
         if (!values.isEmpty()) {

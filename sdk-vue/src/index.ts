@@ -6,6 +6,7 @@ import type { Options } from './types'
 
 export type { Options } from './types'
 export { Client } from './client'
+export type { TracingOptions } from './tracing'
 
 let current: Client | null = null
 
@@ -45,7 +46,15 @@ export function createErrDeck(options: Options) {
       window.addEventListener('error', (event) => client.capture(event.error ?? event.message))
       window.addEventListener('unhandledrejection', (event) => client.capture(event.reason))
 
-      if (options.breadcrumbs !== false) watchBreadcrumbs(client, url, options)
+      if (options.breadcrumbs !== false) watchBreadcrumbs(client, options)
+      watchFetch(client, url, options)
+      if (client.tracer) {
+        const tracer = client.tracer
+        tracer.start(location.pathname, 'pageload')
+        options.router?.beforeEach?.((to) => tracer.start(to.fullPath.split('?')[0] ?? to.fullPath, 'navigation'))
+        // 실제 주소 대신 경로 패턴을 이름으로 쓴다(8.3).
+        options.router?.afterEach((to) => tracer.rename(to.matched?.[to.matched.length - 1]?.path ?? ''))
+      }
 
       const timer = setInterval(() => void client.flush(), options.flushIntervalMs ?? 2000)
       document.addEventListener('visibilitychange', () => {
@@ -62,8 +71,8 @@ export function createErrDeck(options: Options) {
   }
 }
 
-/** 라우트 이동, 클릭한 요소, API 호출의 주소와 상태 코드(11.3). */
-function watchBreadcrumbs(client: Client, ingest: string, options: Options) {
+/** 라우트 이동과 클릭한 요소(11.3). */
+function watchBreadcrumbs(client: Client, options: Options) {
   options.router?.afterEach((to, from) => client.addBreadcrumb({ category: 'navigation', data: { from: from.fullPath, to: to.fullPath } }))
   document.addEventListener(
     'click',
@@ -77,17 +86,31 @@ function watchBreadcrumbs(client: Client, ingest: string, options: Options) {
     },
     true,
   )
+}
+
+/** API 호출의 주소와 상태 코드를 빵부스러기로(11.3), 시간을 스팬으로 남기고 traceparent 를 붙인다(8.3). */
+function watchFetch(client: Client, ingest: string, options: Options) {
+  const crumbs = options.breadcrumbs !== false
   const original = window.fetch.bind(window)
   window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
     if (url.startsWith(ingest.split('?')[0] ?? ingest)) return original(input, init)
     const method = init?.method ?? (input instanceof Request ? input.method : 'GET')
+    const path = url.split('?')[0]
+    const span = client.tracer?.startSpan('http.client', `${method} ${path}`, url)
+    if (span?.header) {
+      const headers = new Headers(init?.headers ?? (input instanceof Request ? input.headers : undefined))
+      headers.set('traceparent', span.header)
+      init = { ...init, headers }
+    }
     try {
       const response = await original(input, init)
-      client.addBreadcrumb({ category: 'http', message: `${method} ${url.split('?')[0]}`, data: { status_code: String(response.status) } })
+      span?.finish(response.status)
+      if (crumbs) client.addBreadcrumb({ category: 'http', message: `${method} ${path}`, data: { status_code: String(response.status) } })
       return response
     } catch (e) {
-      client.addBreadcrumb({ category: 'http', message: `${method} ${url.split('?')[0]}`, data: { error: String(e) } })
+      span?.finish()
+      if (crumbs) client.addBreadcrumb({ category: 'http', message: `${method} ${path}`, data: { error: String(e) } })
       throw e
     }
   }
