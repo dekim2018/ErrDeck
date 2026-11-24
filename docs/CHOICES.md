@@ -96,3 +96,39 @@
 - **다른 선택지**: 봉투와 이벤트 모델만 SDK 안에 따로 두기.
 - **이유**: SDK와 worker가 같은 코드로 형식을 맞춘다(02). core는 JDK만 쓰므로 감시 대상의 의존성과 부딪치지 않는다. 패키지를 어디에 올릴지는 20장의 미정 사항이다.
 - **바꾸려면**: `sdk-spring/build.gradle.kts`.
+
+## 10 데모 앱
+
+### 10-1. 데모 프로젝트의 ID와 키를 9001, 9002로 고정한다
+
+- **고른 것**: `scripts/demo/seed.sql` 이 `OVERRIDING SYSTEM VALUE` 로 프로젝트 ID 9001(demo-api), 9002(demo-web)와 키 `demoapikey`, `demowebkey` 를 넣는다. 여러 번 실행해도 같다.
+- **다른 선택지**: 넣을 때 받은 ID로 DSN을 만들어 출력하는 스크립트, api의 프로젝트 관리 API(11)로 만들기.
+- **이유**: 데모 앱의 설정 파일에 DSN을 고정해 두면 compose와 테스트가 단순하다. 일반 프로젝트의 ID는 1부터 늘어나므로 9001에 닿기 전까지 겹치지 않는다.
+- **바꾸려면**: `scripts/demo/seed.sql`, `demo-api/src/main/resources/application.yml` 의 `errdeck.dsn`.
+
+### 10-2. compose의 데모 앱은 미리 만든 jar를 이미지에 담는다
+
+- **고른 것**: `./gradlew :demo-api:bootJar :loadgen:installDist` 를 먼저 하고, Dockerfile은 그 결과를 `eclipse-temurin:25-jre` 에 복사만 한다.
+- **다른 선택지**: Dockerfile 안에서 Gradle로 빌드하는 다단계 빌드.
+- **이유**: 이미지 빌드마다 Gradle과 의존성을 내려받지 않아 빠르다. 16 작업에서 ingest, worker, api의 Dockerfile을 만들 때 같은 방식을 쓸지 다시 정한다.
+- **바꾸려면**: `demo-api/Dockerfile`, `loadgen/docker/Dockerfile`.
+
+### 10-3. 16 작업 전까지 compose의 데모 앱은 호스트의 ingest로 보낸다
+
+- **고른 것**: `DEMO_ERRDECK_DSN` 의 기본값을 `host.docker.internal:8080` 으로 둔다.
+- **다른 선택지**: 이번 작업에서 ingest도 compose에 올리기.
+- **이유**: 프로세스의 컨테이너 등록은 16 작업의 범위다. 그때 기본값을 compose 안의 ingest로 바꾼다.
+- **바꾸려면**: `docker-compose.yml` 의 `demo-api.environment`.
+
+### 10-4. SDK 부담은 loadgen의 새 시나리오 `http` 로 잰다
+
+- **고른 것**: 임의 주소에 GET을 정해진 속도로 보내는 `http` 시나리오를 더하고, 같은 jar를 SDK 켬과 끔으로 두 개 띄워 번갈아 잰다.
+- **다른 선택지**: 앱 안에서 필터 시간을 재는 마이크로 벤치마크(JMH).
+- **이유**: 2.2의 목표가 요청 시간의 차이이므로 바깥에서 본 응답 시간으로 잰다. 같은 맥에서는 잡음이 커서 1ms 이하는 가리지 못했다(EXPERIMENTS.md). 17 작업에서 기계를 나눠 다시 잰다.
+- **바꾸려면**: `loadgen` 의 `Scenario.HTTP`, `Runner.requests`.
+
+### 10-5. 데모 앱의 스케줄 예외는 켜고 끌 수 있고 기본 60초다
+
+- **고른 것**: `demo.scheduled-failure.enabled`(기본 켬), `interval`(기본 60초).
+- **이유**: 화면에서 스케줄 경로의 이슈를 볼 수 있게 켜 두되, 부담 실험에서는 측정에 섞이지 않게 끈다.
+
