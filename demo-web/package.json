@@ -1,0 +1,25 @@
+{
+  "name": "errdeck-demo-web",
+  "private": true,
+  "type": "module",
+  "description": "Vue SDK 를 붙인 데모 화면. 압축된 번들의 에러가 ingest 에 도착하는지 본다(14 작업).",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "dev": "vite --port 8092",
+    "build": "vue-tsc --noEmit && vite build",
+    "preview": "vite preview --port 8092 --strictPort"
+  },
+  "dependencies": {
+    "@errdeck/sdk-vue": "file:../sdk-vue",
+    "vue": "3.5.46"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.5",
+    "@vitejs/plugin-vue": "6.0.11",
+    "typescript": "5.9.3",
+    "vite": "8.3.8",
+    "vue-tsc": "3.3.14"
+  }
+}
