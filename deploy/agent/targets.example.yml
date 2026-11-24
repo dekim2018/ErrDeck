@@ -1,0 +1,10 @@
+# 감시 대상의 Actuator. job 이름은 ErrDeck 프로젝트 슬러그와 같게 둔다.
+scrape_configs:
+  - job_name: gateway
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["gateway:8080"]
+  - job_name: broadcast-service
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["broadcast-service:8082"]

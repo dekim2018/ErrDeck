@@ -1,0 +1,15 @@
+# 에이전트 모드: 저장과 질의 없이 수집과 전달만 한다(13.3).
+global:
+  scrape_interval: 15s
+
+scrape_config_files:
+  - /etc/prometheus/targets.yml
+
+remote_write:
+  - url: __REMOTE_WRITE_URL__
+    basic_auth:
+      username: agent
+      password_file: /prometheus/remote-password
+    queue_config:
+      # 서버가 꺼졌다 켜질 때 밀린 것을 천천히 보낸다.
+      max_shards: 2
