@@ -61,9 +61,10 @@ public class FakeQueueSource implements QueueSource {
         return out;
     }
 
+    /** 실제 Redis 처럼 확인 처리해 지운 항목은 더 이상 이어받을 수 없다. */
     @Override
     public List<QueueEntry> claim(QueueStream stream, Duration minIdle, int count) {
-        return new ArrayList<>(claimable.get(stream));
+        return claimable.get(stream).stream().filter(entry -> !acked.contains(entry.id())).toList();
     }
 
     @Override
