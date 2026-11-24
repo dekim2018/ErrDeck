@@ -36,3 +36,4 @@ playwright-report/
 
 # 로컬에서 api 와 worker 가 쓰는 소스맵 볼륨
 /data/
+/scripts/experiments/.run/
