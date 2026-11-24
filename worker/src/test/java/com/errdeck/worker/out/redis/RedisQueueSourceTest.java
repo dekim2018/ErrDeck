@@ -112,6 +112,25 @@ class RedisQueueSourceTest extends TestInfra {
     }
 
     @Test
+    void 받지_못한_자기_미확인_항목을_바로_다시_읽는다() {
+        RedisQueueSource source = new RedisQueueSource(factory, group, "me");
+        source.ensureGroups();
+        for (int i = 0; i < 5; i++) {
+            add(7, new byte[] {(byte) i});
+        }
+        readAs("me");
+        readAs("other");
+
+        List<QueueEntry> first = source.readOwn(QueueStream.EVENTS, 3, QueueSource.CLAIM_START);
+        List<QueueEntry> rest = source.readOwn(QueueStream.EVENTS, 3, first.getLast().id());
+
+        assertThat(first).hasSize(3);
+        assertThat(rest).hasSize(2);
+        assertThat(source.readOwn(QueueStream.EVENTS, 3, rest.getLast().id())).isEmpty();
+        source.close();
+    }
+
+    @Test
     void 기다린_시간이_짧은_미확인_항목은_이어받지_않는다() {
         RedisQueueSource source = new RedisQueueSource(factory, group, "me");
         source.ensureGroups();

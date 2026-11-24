@@ -20,8 +20,15 @@ public class ApiExceptionHandler {
             case CONFLICT -> HttpStatus.CONFLICT;
             case BAD_REQUEST -> HttpStatus.BAD_REQUEST;
             case RETRY -> HttpStatus.TOO_MANY_REQUESTS;
+            case UNAVAILABLE -> HttpStatus.SERVICE_UNAVAILABLE;
         };
         return ProblemDetail.forStatusAndDetail(status, e.getMessage());
+    }
+
+    /** 커넥션 풀에서 2초 안에 커넥션을 얻지 못했다(14.6). 요청을 쌓지 않고 503 으로 돌려보낸다. */
+    @ExceptionHandler(org.springframework.jdbc.CannotGetJdbcConnectionException.class)
+    ProblemDetail busy(org.springframework.jdbc.CannotGetJdbcConnectionException e) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE, "조회가 몰려 잠시 뒤 다시 해야 한다");
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

@@ -74,10 +74,22 @@ public class RedisQueueSource implements QueueSource {
     @Override
     @SuppressWarnings("unchecked") // xReadGroup 의 가변 인자가 제네릭 배열이다. 스트림 하나만 넘긴다.
     public List<QueueEntry> read(QueueStream stream, int count, Duration block) {
-        List<ByteRecord> records = readConnection(stream).streamCommands().xReadGroup(
+        return toEntries(stream, readConnection(stream).streamCommands().xReadGroup(
                 Consumer.from(group, consumer),
                 StreamReadOptions.empty().count(count).block(block),
-                StreamOffset.create(bytes(stream.key()), ReadOffset.lastConsumed()));
+                StreamOffset.create(bytes(stream.key()), ReadOffset.lastConsumed())));
+    }
+
+    @Override
+    @SuppressWarnings("unchecked")
+    public List<QueueEntry> readOwn(QueueStream stream, int count, String after) {
+        return toEntries(stream, readConnection(stream).streamCommands().xReadGroup(
+                Consumer.from(group, consumer),
+                StreamReadOptions.empty().count(count),
+                StreamOffset.create(bytes(stream.key()), ReadOffset.from(after))));
+    }
+
+    private List<QueueEntry> toEntries(QueueStream stream, List<ByteRecord> records) {
         if (records == null) {
             return List.of();
         }

@@ -61,6 +61,11 @@ public class FakeQueueSource implements QueueSource {
         return out;
     }
 
+    @Override
+    public List<QueueEntry> readOwn(QueueStream stream, int count, String after) {
+        return List.of();
+    }
+
     /** 실제 Redis 처럼 확인 처리해 지운 항목은 더 이상 이어받을 수 없다. */
     @Override
     public Claimed claim(QueueStream stream, Duration minIdle, int count, String start) {
