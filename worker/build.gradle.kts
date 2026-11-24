@@ -9,7 +9,18 @@ dependencies {
     implementation(project(":core"))
     implementation("org.springframework.boot:spring-boot-starter-webmvc")
     implementation("org.springframework.boot:spring-boot-starter-actuator")
+    implementation("org.springframework.boot:spring-boot-starter-data-redis")
+    runtimeOnly("io.micrometer:micrometer-registry-prometheus")
 
+    testImplementation(testFixtures(project(":core")))
     testImplementation("org.springframework.boot:spring-boot-starter-test")
+    testImplementation("org.testcontainers:testcontainers-junit-jupiter")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+}
+
+// ClickHouse 스키마는 api 가 소유한다. 테스트에서만 api 의 SQL 파일을 컨테이너에 적용한다.
+tasks.test {
+    val schema = project(":api").file("src/main/resources/clickhouse")
+    inputs.dir(schema)
+    systemProperty("errdeck.clickhouse-schema", schema.absolutePath)
 }
