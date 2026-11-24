@@ -46,6 +46,17 @@ class OptionsTest {
     }
 
     @Test
+    void http_시나리오는_주소를_받고_요청_수를_그대로_쓴다() {
+        Options options = Options.parse(new String[] {"http", "--url=http://localhost:8090/demo/ok", "--rate=300"});
+
+        assertEquals(Scenario.HTTP, options.scenario());
+        assertEquals("http://localhost:8090/demo/ok", options.url().toString());
+        assertEquals(300.0, options.envelopesPerSecond());
+        assertThrows(IllegalArgumentException.class, () -> Options.parse(new String[] {"http"}));
+        assertThrows(IllegalArgumentException.class, () -> Options.parse(new String[] {"burst", "--url=http://h/x"}));
+    }
+
+    @Test
     void 시간_형식을_읽는다() {
         assertEquals(Duration.ofMillis(500), Options.parseDuration("500ms"));
         assertEquals(Duration.ofSeconds(30), Options.parseDuration("30s"));

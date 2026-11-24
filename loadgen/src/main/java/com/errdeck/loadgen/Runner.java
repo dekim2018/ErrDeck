@@ -31,17 +31,16 @@ final class Runner {
     private static final Duration PROGRESS_INTERVAL = Duration.ofSeconds(5);
 
     private final Options options;
-    private final Supplier<byte[]> envelopes;
+    private final Supplier<HttpRequest> requests;
     private final PrintStream out;
 
-    Runner(Options options, Supplier<byte[]> envelopes, PrintStream out) {
+    Runner(Options options, Supplier<HttpRequest> requests, PrintStream out) {
         this.options = options;
-        this.envelopes = envelopes;
+        this.requests = requests;
         this.out = out;
     }
 
     Result run() throws InterruptedException {
-        URI uri = options.dsn().envelopeUri();
         Map<Integer, LongAdder> statuses = new ConcurrentHashMap<>();
         LongAdder timeouts = new LongAdder();
         LongAdder errors = new LongAdder();
@@ -74,12 +73,7 @@ final class Runner {
                 }
                 senders.execute(() -> {
                     try {
-                        HttpRequest request = HttpRequest.newBuilder(uri)
-                                .timeout(options.timeout())
-                                .header("X-ErrDeck-Key", options.dsn().publicKey())
-                                .header("Content-Type", "application/octet-stream")
-                                .POST(HttpRequest.BodyPublishers.ofByteArray(envelopes.get()))
-                                .build();
+                        HttpRequest request = requests.get();
                         HttpResponse<Void> response = client.send(request, HttpResponse.BodyHandlers.discarding());
                         latency.record((System.nanoTime() - intended) / 1000);
                         statuses.computeIfAbsent(response.statusCode(), s -> new LongAdder()).increment();
@@ -133,8 +127,19 @@ final class Runner {
         }
     }
 
-    static Supplier<byte[]> envelopes(Options options) {
+    /** 시나리오에 맞는 요청을 만든다. 봉투는 보내기 직전에 만들어 매번 다른 event_id 를 쓴다. */
+    static Supplier<HttpRequest> requests(Options options) {
+        if (options.scenario() == Scenario.HTTP) {
+            HttpRequest get = HttpRequest.newBuilder(options.url()).timeout(options.timeout()).GET().build();
+            return () -> get;
+        }
         EventFactory factory = new EventFactory(options, Clock.systemUTC());
-        return factory::nextEnvelope;
+        URI uri = options.dsn().envelopeUri();
+        return () -> HttpRequest.newBuilder(uri)
+                .timeout(options.timeout())
+                .header("X-ErrDeck-Key", options.dsn().publicKey())
+                .header("Content-Type", "application/octet-stream")
+                .POST(HttpRequest.BodyPublishers.ofByteArray(factory.nextEnvelope()))
+                .build();
     }
 }

@@ -24,8 +24,9 @@ public final class LoadGen {
         }
         Runtime runtime = Runtime.getRuntime();
         System.out.printf("환경         코어 %d, 최대 힙 %,dMB, 대상 %s%n",
-                runtime.availableProcessors(), runtime.maxMemory() / 1024 / 1024, options.dsn().envelopeUri());
-        Result result = new Runner(options, Runner.envelopes(options), System.out).run();
+                runtime.availableProcessors(), runtime.maxMemory() / 1024 / 1024,
+                options.scenario() == Scenario.HTTP ? options.url() : options.dsn().envelopeUri());
+        Result result = new Runner(options, Runner.requests(options), System.out).run();
         System.out.print(result.format());
     }
 }

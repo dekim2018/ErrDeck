@@ -50,7 +50,7 @@ class RunnerTest {
         byte[] envelope = {1, 2, 3};
         ByteArrayOutputStream log = new ByteArrayOutputStream();
 
-        Result result = new Runner(options, () -> envelope, new PrintStream(log)).run();
+        Result result = new Runner(options, post(options, envelope), new PrintStream(log)).run();
 
         assertEquals(Map.of(202, 30L, 429, 70L), result.statuses());
         assertEquals(100, result.attempted());
@@ -61,6 +61,33 @@ class RunnerTest {
         // 1초 동안 100건이면 0.99초 근처에서 끝난다. 응답을 기다렸다가 보냈다면 더 걸린다.
         assertTrue(result.elapsed().toMillis() < 3_000, "걸린 시간 " + result.elapsed());
         assertTrue(result.format().contains("429"));
+    }
+
+    @Test
+    void http_시나리오는_주소에_GET_을_보낸다() throws Exception {
+        AtomicInteger gets = new AtomicInteger();
+        server.createContext("/demo/ok", exchange -> {
+            if ("GET".equals(exchange.getRequestMethod())) {
+                gets.incrementAndGet();
+            }
+            exchange.sendResponseHeaders(200, -1);
+            exchange.close();
+        });
+        Options options = Options.parse(new String[] {"http",
+                "--url=http://127.0.0.1:" + server.getAddress().getPort() + "/demo/ok", "--rate=50", "--duration=1s"});
+
+        Result result = new Runner(options, Runner.requests(options), new PrintStream(new ByteArrayOutputStream())).run();
+
+        assertEquals(Map.of(200, 50L), result.statuses());
+        assertEquals(50, gets.get());
+    }
+
+    private static java.util.function.Supplier<java.net.http.HttpRequest> post(Options options, byte[] body) {
+        return () -> java.net.http.HttpRequest.newBuilder(options.dsn().envelopeUri())
+                .timeout(options.timeout())
+                .header("X-ErrDeck-Key", options.dsn().publicKey())
+                .POST(java.net.http.HttpRequest.BodyPublishers.ofByteArray(body))
+                .build();
     }
 
     @Test
@@ -80,7 +107,7 @@ class RunnerTest {
                 "--dsn=http://k@127.0.0.1:" + server.getAddress().getPort() + "/7",
                 "--rate=50", "--duration=1s", "--max-in-flight=10", "--timeout=1s"});
 
-        Result result = new Runner(options, () -> new byte[] {1}, new PrintStream(new ByteArrayOutputStream())).run();
+        Result result = new Runner(options, post(options, new byte[] {1}), new PrintStream(new ByteArrayOutputStream())).run();
 
         assertEquals(50, result.attempted());
         assertEquals(40, result.dropped());
