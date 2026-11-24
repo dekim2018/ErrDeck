@@ -30,7 +30,19 @@ public final class ClickHouseHttp {
 
     /** @param database 비우면 기본 데이터베이스에서 실행한다 */
     public String execute(String database, String sql) {
-        String query = database == null ? "" : "?database=" + URLEncoder.encode(database, StandardCharsets.UTF_8);
+        return execute(database, sql, java.util.Map.of());
+    }
+
+    /**
+     * @param parameters 쿼리 매개변수. {@code {이름:타입}} 자리에 들어간다. 값을 SQL 에 이어 붙이지 않는다
+     */
+    public String execute(String database, String sql, java.util.Map<String, String> parameters) {
+        StringBuilder query = new StringBuilder();
+        if (database != null) {
+            query.append("?database=").append(URLEncoder.encode(database, StandardCharsets.UTF_8));
+        }
+        parameters.forEach((name, value) -> query.append(query.isEmpty() ? '?' : '&').append("param_").append(name).append('=')
+                .append(URLEncoder.encode(value, StandardCharsets.UTF_8)));
         HttpRequest request = HttpRequest.newBuilder(url.resolve("/" + query))
                 .timeout(timeout)
                 .header("X-ClickHouse-User", user)
