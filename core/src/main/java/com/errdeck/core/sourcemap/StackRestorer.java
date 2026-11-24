@@ -105,7 +105,9 @@ public final class StackRestorer {
         String path = cleanPath(p.source());
         boolean inApp = !path.contains("node_modules/");
         SourceContext.Lines lines = wantContext && inApp ? context(key, p) : null;
-        return Optional.of(new StackFrame(null, p.name() != null ? p.name() : frame.function(), path, p.line(), p.column() + 1, inApp,
+        // 소스맵에 원래 이름이 없으면 함수 이름을 비운다. 브라우저 스택의 이름은 압축된 이름(Oo, t)이라 빌드마다 바뀌어
+        // 지문을 흔든다. 이때 지문은 원본 경로만으로 만든다(CHOICES 15-4).
+        return Optional.of(new StackFrame(null, p.name(), path, p.line(), p.column() + 1, inApp,
                 frame.filename(), lines == null ? List.of() : lines.lines(), lines == null ? null : lines.firstLine()));
     }
 

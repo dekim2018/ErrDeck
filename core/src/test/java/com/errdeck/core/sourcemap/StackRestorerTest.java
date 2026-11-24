@@ -60,6 +60,7 @@ class StackRestorerTest {
         StackFrame restored = result.event().exceptions().getFirst().frames().getFirst();
         assertTrue(result.restored());
         assertEquals("src/collab.ts", restored.filename());
+        assertNotEquals("t", restored.function(), "압축된 이름(t)은 남기지 않고 소스맵의 원래 이름이나 빈 값을 쓴다");
         assertTrue(restored.inApp());
         assertEquals(BUNDLE + "?v=3", restored.absPath());
         assertFalse(restored.context().isEmpty());
