@@ -33,6 +33,19 @@ import org.junit.jupiter.api.Test;
 class PipelineTest {
 
     private static final EnvelopeCodec CODEC = new EnvelopeCodec(EnvelopeLimits.DEFAULT);
+    /** 소스맵이 하나도 없는 저장소. 자바 이벤트만 다루므로 복원기를 거쳐도 그대로다. */
+    static final com.errdeck.core.sourcemap.StackRestorer NO_SOURCEMAPS = new com.errdeck.core.sourcemap.StackRestorer(
+            new com.errdeck.core.files.ArtifactStore() {
+                @Override
+                public String put(long projectId, String release, String name, byte[] content) {
+                    throw new UnsupportedOperationException();
+                }
+
+                @Override
+                public java.util.Optional<byte[]> get(long projectId, String release, String name) {
+                    return java.util.Optional.empty();
+                }
+            }, new com.errdeck.core.sourcemap.SourceMapCache<>(1024 * 1024));
 
     private final FakeQueueSource source = new FakeQueueSource();
     private final FakeBatchWriter sink = new FakeBatchWriter();
@@ -173,7 +186,7 @@ class PipelineTest {
 
     private void start(WorkerProperties properties) {
         WorkerMetrics metrics = new WorkerMetrics(new SimpleMeterRegistry());
-        EnvelopeProcessor processor = new EnvelopeProcessor(CODEC, new Fingerprinter(new AppFrames(List.of("com.app"))), metrics);
+        EnvelopeProcessor processor = new EnvelopeProcessor(CODEC, new Fingerprinter(new AppFrames(List.of("com.app"))), NO_SOURCEMAPS, metrics);
         pipeline = new Pipeline(source, sink, processor, metrics, properties, Clock.systemUTC());
         pipeline.start();
     }
@@ -185,21 +198,21 @@ class PipelineTest {
     static WorkerProperties properties(int batchMaxRows, Duration batchMaxWait, int handoff, int writeQueue) {
         return new WorkerProperties("g", 500, Duration.ofMillis(20), handoff, 2, 3, writeQueue, batchMaxRows, batchMaxWait,
                 Duration.ofHours(1), Duration.ofSeconds(60), Duration.ofMillis(200), Duration.ofSeconds(30), List.of(),
-                3, 1000, 100, Duration.ofHours(1));
+                3, 1000, 100, Duration.ofHours(1), "unused", org.springframework.util.unit.DataSize.ofMegabytes(1));
     }
 
     private static WorkerProperties withShutdown(WorkerProperties p, Duration timeout) {
         return new WorkerProperties(p.consumerGroup(), p.readCount(), p.readBlock(), p.handoffCapacity(), p.computeThreads(),
                 p.eventsPerTransaction(), p.writeQueueCapacity(), p.batchMaxRows(), p.batchMaxWait(), p.claimInterval(),
                 p.claimMinIdle(), p.retryMaxBackoff(), timeout, p.inAppPackages(),
-                p.maxProcessAttempts(), p.issueCacheSize(), p.samplesPerIssuePerMinute(), p.seenTtl());
+                p.maxProcessAttempts(), p.issueCacheSize(), p.samplesPerIssuePerMinute(), p.seenTtl(), p.filesDir(), p.sourcemapCacheSize());
     }
 
     private static WorkerProperties withClaimInterval(WorkerProperties p, Duration interval) {
         return new WorkerProperties(p.consumerGroup(), p.readCount(), p.readBlock(), p.handoffCapacity(), p.computeThreads(),
                 p.eventsPerTransaction(), p.writeQueueCapacity(), p.batchMaxRows(), p.batchMaxWait(), interval,
                 p.claimMinIdle(), p.retryMaxBackoff(), p.shutdownTimeout(), p.inAppPackages(),
-                p.maxProcessAttempts(), p.issueCacheSize(), p.samplesPerIssuePerMinute(), p.seenTtl());
+                p.maxProcessAttempts(), p.issueCacheSize(), p.samplesPerIssuePerMinute(), p.seenTtl(), p.filesDir(), p.sourcemapCacheSize());
     }
 
     static byte[] envelope(int events) {

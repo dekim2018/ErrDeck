@@ -62,6 +62,10 @@ errdeck:
     # 이슈별 분당 원본 저장 상한(10.3). 넘는 것은 건수만 남긴다.
     samples-per-issue-per-minute: 100
     seen-ttl: 1h
+    # 소스맵 볼륨. api 의 errdeck.files.dir 과 같은 경로다(7.2).
+    files-dir: ${ERRDECK_FILES_DIR:./data/artifacts}
+    # 해석한 소스맵 캐시. 힙 448MB 중 128MB(14.7).
+    sourcemap-cache-size: 128MB
   clickhouse:
     url: http://${ERRDECK_CLICKHOUSE_HOST:localhost}:${ERRDECK_CLICKHOUSE_PORT:18123}
     database: errdeck

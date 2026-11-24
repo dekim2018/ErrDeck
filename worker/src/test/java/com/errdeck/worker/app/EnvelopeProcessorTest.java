@@ -28,7 +28,8 @@ import org.junit.jupiter.api.Test;
 class EnvelopeProcessorTest {
 
     private final EnvelopeProcessor processor = new EnvelopeProcessor(new EnvelopeCodec(EnvelopeLimits.DEFAULT),
-            new Fingerprinter(new AppFrames(List.of("com.livebroadcast"))), new WorkerMetrics(new SimpleMeterRegistry()));
+            new Fingerprinter(new AppFrames(List.of("com.livebroadcast"))), PipelineTest.NO_SOURCEMAPS,
+            new WorkerMetrics(new SimpleMeterRegistry()));
 
     @Test
     void 예제_봉투의_이벤트_2건을_지문과_함께_행으로_바꾸고_트랜잭션과_client_report_는_건너뛴다() {
@@ -90,6 +91,30 @@ class EnvelopeProcessorTest {
         assertThat(EnvelopeProcessor.title(null, "메시지만")).isEqualTo("메시지만");
         assertThat(EnvelopeProcessor.title(null, "")).isEqualTo("(메시지 없음)");
         assertThat(EnvelopeProcessor.title(null, "가".repeat(500))).hasSize(EnvelopeProcessor.TITLE_MAX);
+    }
+
+    @Test
+    void 브라우저_번들_프레임을_올린_소스맵으로_되돌리고_복원_표시를_한다(@org.junit.jupiter.api.io.TempDir java.nio.file.Path dir) {
+        com.errdeck.core.files.LocalArtifactStore store = new com.errdeck.core.files.LocalArtifactStore(dir);
+        // 압축 번들 1번 줄 0열 → src/editor.ts 3번 줄 2열, 함수 이름 applyRemote
+        store.put(9002, "web@1", "assets/index-x.js.map", ("{\"version\":3,\"sources\":[\"../../src/editor.ts\"],\"names\":[\"applyRemote\"],"
+                + "\"mappings\":\"AAEEA\",\"sourcesContent\":[\"a\\nb\\nconst n = change.ops.length\\nd\"]}").getBytes(StandardCharsets.UTF_8));
+        EnvelopeProcessor withMaps = new EnvelopeProcessor(new EnvelopeCodec(EnvelopeLimits.DEFAULT), new Fingerprinter(new AppFrames(List.of())),
+                new com.errdeck.core.sourcemap.StackRestorer(store, new com.errdeck.core.sourcemap.SourceMapCache<>(1024 * 1024)),
+                new WorkerMetrics(new SimpleMeterRegistry()));
+        com.errdeck.core.event.Event browser = new com.errdeck.core.event.Event(java.util.UUID.randomUUID(), Instant.now(), "error", null,
+                "production", "web@1", null, null, List.of(), 1,
+                List.of(new ExceptionInfo("TypeError", "x", List.of(new com.errdeck.core.event.StackFrame(null, "t",
+                        "https://x.example.com/assets/index-x.js", 1, 1, null)))), null, java.util.Map.of(), List.of());
+        byte[] body = new EnvelopeCodec(EnvelopeLimits.DEFAULT).encode(new Envelope(new com.errdeck.core.envelope.EnvelopeHeader("vue", Instant.now()),
+                List.of(new EnvelopeItem(ItemType.EVENT, browser.toJson()))));
+
+        ProcessedEntry processed = withMaps.process(new QueueEntry(QueueStream.EVENTS, "1-0", 9002, Instant.now(), body));
+
+        EventRow row = processed.rows().getFirst();
+        assertThat(row.restored()).isTrue();
+        assertThat(row.culprit()).isEqualTo("src/editor.ts#applyRemote");
+        assertThat(row.payload()).contains("\"filename\":\"src/editor.ts\"").contains("\"lineno\":3").contains("const n = change.ops.length");
     }
 
     @Test

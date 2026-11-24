@@ -26,5 +26,6 @@ describe('frameLabel', () => {
     expect(frameLabel({ module: 'com.app.Svc', function: 'run', filename: 'Svc.java', lineno: 42 })).toBe('com.app.Svc.run (Svc.java:42)')
     expect(frameLabel({ function: 'apply', filename: 'src/a.ts', lineno: 3, colno: 9 })).toBe('apply (src/a.ts:3:9)')
     expect(frameLabel({ function: 'x' })).toBe('x (알 수 없는 위치)')
+    expect(frameLabel({ filename: 'src/collab.ts', lineno: 7, colno: 35 })).toBe('src/collab.ts:7:35')
   })
 })

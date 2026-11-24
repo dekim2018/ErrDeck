@@ -14,7 +14,14 @@ const expanded = ref<Record<string, boolean>>({})
     <p v-if="ex.value" class="ex-value">{{ ex.value }}</p>
     <ol class="frames">
       <template v-for="(group, g) in groupFrames(ex.frames ?? [])" :key="g">
-        <li v-if="group.kind === 'app'" class="frame app">{{ frameLabel(group.frame) }}</li>
+        <li v-if="group.kind === 'app'" class="frame app" :title="group.frame.abs_path ? `번들: ${group.frame.abs_path}` : undefined">
+          {{ frameLabel(group.frame) }}
+          <ol v-if="group.frame.context?.length" class="context" :start="group.frame.context_start">
+            <li v-for="(code, c) in group.frame.context" :key="c" :class="{ focus: (group.frame.context_start ?? 0) + c === group.frame.lineno }">
+              <span class="ln">{{ (group.frame.context_start ?? 0) + c }}</span><code>{{ code }}</code>
+            </li>
+          </ol>
+        </li>
         <li v-else class="frame library">
           <button class="link" @click="expanded[`${i}-${g}`] = !expanded[`${i}-${g}`]">
             라이브러리 프레임 {{ group.frames.length }}개 {{ expanded[`${i}-${g}`] ? '접기' : '펼치기' }}

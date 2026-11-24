@@ -1,4 +1,4 @@
-import type { IssueDetail, IssueStatus, IssueSummary, Period, Project, Sort, SystemView, Token, User } from './types'
+import type { IssueDetail, IssueStatus, IssueSummary, Period, Project, ReleaseSummary, Sort, SystemView, Token, User } from './types'
 
 /** api 가 돌려준 실패. 본문은 RFC 9457 형식이다. */
 export class ApiError extends Error {
@@ -91,6 +91,10 @@ export class Client {
 
   changeStatus(issueId: number, status: IssueStatus, extra: { resolvedInRelease?: string; ignoredUntil?: string } = {}): Promise<void> {
     return this.request('PATCH', `/api/issues/${issueId}`, { status, ...extra })
+  }
+
+  releases(projectId: number): Promise<ReleaseSummary[]> {
+    return this.request('GET', `/api/projects/${projectId}/releases`)
   }
 
   comment(issueId: number, body: string): Promise<{ id: number }> {

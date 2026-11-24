@@ -155,13 +155,15 @@ public class WorkspaceService {
     /**
      * 사용자가 바꿀 수 있는 이슈 상태. 재발(regressed)은 worker 가 정하고, 해결에서 재발로 바뀌는 판정은 15 작업에서 한다.
      */
-    public void changeIssueStatus(long userId, long issueId, String status, String resolvedInRelease, Instant ignoredUntil) {
+    public void changeIssueStatus(long userId, long issueId, String status, String resolvedInRelease, Instant ignoredUntil,
+                                  Long ignoredUntilCount) {
         access.requireIssue(userId, issueId, Role.MEMBER);
         if (!SETTABLE_STATUSES.contains(status)) {
             throw new ApiException(Kind.BAD_REQUEST, "상태는 " + SETTABLE_STATUSES + " 중 하나다");
         }
+        boolean ignored = "ignored".equals(status);
         workspace.updateIssueStatus(issueId, status, "resolved".equals(status) ? resolvedInRelease : null,
-                "ignored".equals(status) ? ignoredUntil : null);
+                ignored ? ignoredUntil : null, ignored ? ignoredUntilCount : null);
     }
 
     public long comment(long userId, long issueId, String body) {

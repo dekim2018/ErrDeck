@@ -13,6 +13,12 @@ export const router = createRouter({
       props: (route) => ({ systemId: Number(route.params.systemId), projectId: Number(route.params.projectId) }),
     },
     {
+      path: '/systems/:systemId/projects/:projectId/releases',
+      name: 'releases',
+      component: () => import('./views/ReleaseListView.vue'),
+      props: (route) => ({ systemId: Number(route.params.systemId), projectId: Number(route.params.projectId) }),
+    },
+    {
       path: '/systems/:systemId/issues/:issueId',
       name: 'issue',
       component: () => import('./views/IssueDetailView.vue'),

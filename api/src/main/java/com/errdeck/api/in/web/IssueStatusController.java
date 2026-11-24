@@ -20,7 +20,8 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 public class IssueStatusController {
 
-    public record StatusChange(@NotBlank String status, String resolvedInRelease, Instant ignoredUntil) {
+    /** @param ignoredUntilCount 무시하는 동안 이만큼 더 나면 미해결로 돌아간다(6.6) */
+    public record StatusChange(@NotBlank String status, String resolvedInRelease, Instant ignoredUntil, Long ignoredUntilCount) {
     }
 
     public record NewComment(@NotBlank @Size(max = 10_000) String body) {
@@ -35,7 +36,8 @@ public class IssueStatusController {
     @PatchMapping("/api/issues/{issueId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void changeStatus(@AuthenticationPrincipal Jwt jwt, @PathVariable long issueId, @Valid @RequestBody StatusChange body) {
-        workspace.changeIssueStatus(CurrentUser.id(jwt), issueId, body.status(), body.resolvedInRelease(), body.ignoredUntil());
+        workspace.changeIssueStatus(CurrentUser.id(jwt), issueId, body.status(), body.resolvedInRelease(), body.ignoredUntil(),
+                body.ignoredUntilCount());
     }
 
     @PostMapping("/api/issues/{issueId}/comments")

@@ -6,7 +6,7 @@ Java 25, Spring Boot 4.1, Spring Security 7.1, Vue 3을 쓴다. 저장소는 Pos
 
 ## 지금 상태
 
-14 작업(Vue SDK)까지 했다. core에 DSN 해석, 봉투 형식, 이벤트 모델, 지문 규칙 9개(값을 지운 메시지, 프록시와 람다 이름 정리, 앱 프레임 판정), 소스맵 해석기와 바이트 상한 캐시가 있다. ingest는 `POST /ingest/{projectId}/envelope` 로 봉투를 받아 키와 출처를 확인하고, Lua 스크립트 하나로 프로젝트 한도 차감, 대기열 길이 확인, Redis 스트림 적재를 한다. api는 콘솔 사용자의 가입, 로그인, 토큰 재발급과 시스템 단위 권한(VIEWER, MEMBER, ADMIN, OWNER)을 맡고, 시스템, 구성원, 프로젝트, DSN 키를 관리하는 API를 둔다. 뜰 때 PostgreSQL 스키마(Flyway, 테이블 16개)와 ClickHouse 스키마(테이블 5개, 분 단위 집계 뷰, worker와 api용 사용자)를 적용한다. loadgen으로 지속 부하와 폭주를 걸 수 있고, 폭주에서 대기열이 상한 20,000에서 멈추는 것을 확인했다([docs/EXPERIMENTS.md](docs/EXPERIMENTS.md)). worker는 대기열을 읽어 이벤트의 지문을 계산하고, 지문으로 이슈를 찾거나 만들고, 받은 이벤트 전부의 건수와 이슈별 분당 100건까지의 원본을 ClickHouse에 묶어 쓴 뒤 확인 처리한다. 이미 처리한 event_id는 거르고, 처리할 수 없는 원문은 격리한다. 모든 큐에 길이가 있어 ClickHouse가 멈추면 대기열이 상한에서 멈추고 ingest가 503을 준다. sdk-spring은 감시 대상 Spring Boot 앱(서블릿, WebFlux)에서 500번대로 끝난 예외, 스케줄과 비동기 작업의 예외, `log.error` 의 예외를 잡아 묶어 보낸다. 진행 상황은 [docs/WORKFLOW.md](docs/WORKFLOW.md)의 5장에 있다.
+15 작업(릴리스와 소스맵 업로드, 재발 판정)까지 했다. 4단계(Vue SDK와 소스맵)가 끝났다. core에 DSN 해석, 봉투 형식, 이벤트 모델, 지문 규칙 9개(값을 지운 메시지, 프록시와 람다 이름 정리, 앱 프레임 판정), 소스맵 해석기와 바이트 상한 캐시가 있다. ingest는 `POST /ingest/{projectId}/envelope` 로 봉투를 받아 키와 출처를 확인하고, Lua 스크립트 하나로 프로젝트 한도 차감, 대기열 길이 확인, Redis 스트림 적재를 한다. api는 콘솔 사용자의 가입, 로그인, 토큰 재발급과 시스템 단위 권한(VIEWER, MEMBER, ADMIN, OWNER)을 맡고, 시스템, 구성원, 프로젝트, DSN 키를 관리하는 API를 둔다. 뜰 때 PostgreSQL 스키마(Flyway, 테이블 16개)와 ClickHouse 스키마(테이블 5개, 분 단위 집계 뷰, worker와 api용 사용자)를 적용한다. loadgen으로 지속 부하와 폭주를 걸 수 있고, 폭주에서 대기열이 상한 20,000에서 멈추는 것을 확인했다([docs/EXPERIMENTS.md](docs/EXPERIMENTS.md)). worker는 대기열을 읽어 이벤트의 지문을 계산하고, 지문으로 이슈를 찾거나 만들고, 받은 이벤트 전부의 건수와 이슈별 분당 100건까지의 원본을 ClickHouse에 묶어 쓴 뒤 확인 처리한다. 이미 처리한 event_id는 거르고, 처리할 수 없는 원문은 격리한다. 모든 큐에 길이가 있어 ClickHouse가 멈추면 대기열이 상한에서 멈추고 ingest가 503을 준다. 브라우저 에러는 올린 소스맵으로 원본 파일과 줄로 되돌리고, 해결한 이슈가 나중 릴리스에서 다시 나면 재발로 바꾼다. sdk-spring은 감시 대상 Spring Boot 앱(서블릿, WebFlux)에서 500번대로 끝난 예외, 스케줄과 비동기 작업의 예외, `log.error` 의 예외를 잡아 묶어 보낸다. 진행 상황은 [docs/WORKFLOW.md](docs/WORKFLOW.md)의 5장에 있다.
 
 ## 모듈
 
@@ -72,6 +72,14 @@ curl -s localhost:8090/demo/bad-request    # 400, 이슈가 되지 않는다
 cd web && npm ci && ERRDECK_API=http://localhost:8081 npm run dev   # http://localhost:5173
 docker compose exec postgres psql -U errdeck -c "insert into system_members (system_id, user_id, role) select s.id, u.id, 'OWNER' from systems s, users u where s.name = '데모 앱' and u.email = '가입한 이메일'"
 ```
+
+브라우저 앱의 소스맵을 올린다. 콘솔에서 프로젝트 토큰을 발급받아(`POST /api/projects/{id}/tokens`, OWNER) 빌드 뒤에 실행한다. 릴리스는 SDK 초기화에 넣은 값과 같아야 한다.
+
+```bash
+ERRDECK_TOKEN=edt_... scripts/upload-sourcemaps.sh http://localhost:8081 9002 demo-web@1a2b3c4 demo-web/dist
+```
+
+api와 worker는 같은 소스맵 볼륨(`ERRDECK_FILES_DIR`, 기본 `./data/artifacts`)을 써야 한다.
 
 compose로 띄우려면 `./gradlew :demo-api:bootJar :loadgen:installDist` 뒤에 `docker compose --profile demo up -d demo-api` 를 쓴다.
 

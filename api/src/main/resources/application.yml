@@ -65,4 +65,8 @@ errdeck:
     allowed-origins: ${ERRDECK_CONSOLE_ORIGINS:http://localhost:5173}
     # 이슈 상세의 그라파나 링크(12.4). 16 작업에서 compose 의 그라파나 주소로 맞춘다.
     grafana-url: ${ERRDECK_GRAFANA_URL:http://localhost:3000}
+  files:
+    # 소스맵 볼륨(7.2). worker 도 같은 경로를 쓴다. compose 에서는 공유 볼륨을 붙인다(16 작업).
+    dir: ${ERRDECK_FILES_DIR:./data/artifacts}
+    max-artifact-size: 20MB
 

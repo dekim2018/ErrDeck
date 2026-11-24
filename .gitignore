@@ -33,3 +33,6 @@ playwright-report/
 
 # 브라우저 자동화 도구의 스냅샷과 화면
 .playwright-mcp/
+
+# 로컬에서 api 와 worker 가 쓰는 소스맵 볼륨
+/data/

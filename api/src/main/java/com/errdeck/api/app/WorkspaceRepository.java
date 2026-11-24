@@ -59,7 +59,7 @@ public interface WorkspaceRepository {
     boolean revokeKey(long projectId, long keyId, Instant revokedAt);
 
     /** @return 바꾼 행이 있으면 true */
-    boolean updateIssueStatus(long issueId, String status, String resolvedInRelease, Instant ignoredUntil);
+    boolean updateIssueStatus(long issueId, String status, String resolvedInRelease, Instant ignoredUntil, Long ignoredUntilCount);
 
     long addComment(long issueId, long userId, String body);
 
