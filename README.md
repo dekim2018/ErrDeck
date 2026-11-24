@@ -6,22 +6,23 @@ Java 25, Spring Boot 4.1, Spring Security 7.1, Vue 3을 쓴다. 저장소는 Pos
 
 ## 지금 상태
 
-15 작업(릴리스와 소스맵 업로드, 재발 판정)까지 했다. 4단계(Vue SDK와 소스맵)가 끝났다. core에 DSN 해석, 봉투 형식, 이벤트 모델, 지문 규칙 9개(값을 지운 메시지, 프록시와 람다 이름 정리, 앱 프레임 판정), 소스맵 해석기와 바이트 상한 캐시가 있다. ingest는 `POST /ingest/{projectId}/envelope` 로 봉투를 받아 키와 출처를 확인하고, Lua 스크립트 하나로 프로젝트 한도 차감, 대기열 길이 확인, Redis 스트림 적재를 한다. api는 콘솔 사용자의 가입, 로그인, 토큰 재발급과 시스템 단위 권한(VIEWER, MEMBER, ADMIN, OWNER)을 맡고, 시스템, 구성원, 프로젝트, DSN 키를 관리하는 API를 둔다. 뜰 때 PostgreSQL 스키마(Flyway, 테이블 16개)와 ClickHouse 스키마(테이블 5개, 분 단위 집계 뷰, worker와 api용 사용자)를 적용한다. loadgen으로 지속 부하와 폭주를 걸 수 있고, 폭주에서 대기열이 상한 20,000에서 멈추는 것을 확인했다([docs/EXPERIMENTS.md](docs/EXPERIMENTS.md)). worker는 대기열을 읽어 이벤트의 지문을 계산하고, 지문으로 이슈를 찾거나 만들고, 받은 이벤트 전부의 건수와 이슈별 분당 100건까지의 원본을 ClickHouse에 묶어 쓴 뒤 확인 처리한다. 이미 처리한 event_id는 거르고, 처리할 수 없는 원문은 격리한다. 모든 큐에 길이가 있어 ClickHouse가 멈추면 대기열이 상한에서 멈추고 ingest가 503을 준다. 브라우저 에러는 올린 소스맵으로 원본 파일과 줄로 되돌리고, 해결한 이슈가 나중 릴리스에서 다시 나면 재발로 바꾼다. sdk-spring은 감시 대상 Spring Boot 앱(서블릿, WebFlux)에서 500번대로 끝난 예외, 스케줄과 비동기 작업의 예외, `log.error` 의 예외를 잡아 묶어 보낸다. 진행 상황은 [docs/WORKFLOW.md](docs/WORKFLOW.md)의 5장에 있다.
+16 작업(지표, 대시보드, 경보)까지 했다. core에 DSN 해석, 봉투 형식, 이벤트 모델, 지문 규칙 9개(값을 지운 메시지, 프록시와 람다 이름 정리, 앱 프레임 판정), 소스맵 해석기와 바이트 상한 캐시가 있다. ingest는 `POST /ingest/{projectId}/envelope` 로 봉투를 받아 키와 출처를 확인하고, Lua 스크립트 하나로 프로젝트 한도 차감, 대기열 길이 확인, Redis 스트림 적재를 한다. api는 콘솔 사용자의 가입, 로그인, 토큰 재발급과 시스템 단위 권한(VIEWER, MEMBER, ADMIN, OWNER)을 맡고, 시스템, 구성원, 프로젝트, DSN 키를 관리하는 API를 둔다. 뜰 때 PostgreSQL 스키마(Flyway, 테이블 16개)와 ClickHouse 스키마(테이블 5개, 분 단위 집계 뷰, worker와 api용 사용자)를 적용한다. loadgen으로 지속 부하와 폭주를 걸 수 있고, 폭주에서 대기열이 상한 20,000에서 멈추는 것을 확인했다([docs/EXPERIMENTS.md](docs/EXPERIMENTS.md)). worker는 대기열을 읽어 이벤트의 지문을 계산하고, 지문으로 이슈를 찾거나 만들고, 받은 이벤트 전부의 건수와 이슈별 분당 100건까지의 원본을 ClickHouse에 묶어 쓴 뒤 확인 처리한다. 이미 처리한 event_id는 거르고, 처리할 수 없는 원문은 격리한다. 모든 큐에 길이가 있어 ClickHouse가 멈추면 대기열이 상한에서 멈추고 ingest가 503을 준다. 브라우저 에러는 올린 소스맵으로 원본 파일과 줄로 되돌리고, 해결한 이슈가 나중 릴리스에서 다시 나면 재발로 바꾼다. sdk-spring은 감시 대상 Spring Boot 앱(서블릿, WebFlux)에서 500번대로 끝난 예외, 스케줄과 비동기 작업의 예외, `log.error` 의 예외를 잡아 묶어 보낸다. `docker compose --profile core --profile obs up -d --build` 한 번으로 세 프로세스와 Prometheus, Grafana, Alertmanager가 CPU와 메모리 상한 안에서 뜨고, 대시보드 5개와 경보 규칙 8개가 함께 올라온다. 진행 상황은 [docs/WORKFLOW.md](docs/WORKFLOW.md)의 5장에 있다.
 
 ## 모듈
 
 | 모듈 | 내용 | 포트 |
 | --- | --- | --- |
 | `core` | 도메인 모델, 지문 계산, 소스맵 해석, 봉투 형식. 스프링에 의존하지 않는다. 예제 봉투(`testFixtures`)를 다른 모듈의 테스트와 함께 쓴다 | |
-| `ingest` | 수집 프로세스. 크기, DSN 키, 출처를 확인하고 한도 안에서 봉투를 Redis 스트림에 넣는다. 지표는 `/actuator/prometheus` | 8080 |
+| `ingest` | 수집 프로세스. 크기, DSN 키, 출처를 확인하고 한도 안에서 봉투를 Redis 스트림에 넣는다. 지표는 `/actuator/prometheus` | 8080 (compose 18080) |
 | `worker` | 처리 프로세스. 대기열을 읽어 지문을 계산하고 이슈를 찾거나 만들며, 건수와 원본 표본을 ClickHouse에 묶어 쓴다. 웹 서버는 상태 확인과 지표에만 쓴다 | 8082 |
-| `api` | 조회와 설정 프로세스. 로그인(JWT, 리프레시 쿠키), 시스템 단위 권한, 시스템과 프로젝트와 키 관리 API. PostgreSQL 스키마(Flyway)와 ClickHouse 스키마를 적용한다 | 8081 |
+| `api` | 조회와 설정 프로세스. 로그인(JWT, 리프레시 쿠키), 시스템 단위 권한, 시스템과 프로젝트와 키 관리 API. PostgreSQL 스키마(Flyway)와 ClickHouse 스키마를 적용한다 | 8081 (compose 18081) |
 | `sdk-spring` | Spring Boot Starter SDK. `errdeck.dsn` 만 설정하면 예외를 잡아 보낸다. 큐 1,000, 전송 스레드 1개, 같은 에러 접기, 거절 응답 따르기 | |
 | `demo-api` | 데모 앱. Starter SDK를 붙이고 처리된 예외, 처리되지 않은 예외, 비동기, 스케줄, 400번대 예외를 내는 엔드포인트를 둔다 | 8090 |
 | `loadgen` | 부하와 폭주를 만드는 명령줄 도구. 실제 봉투 형식으로 정해진 속도를 지켜 보내고(`sustained`, `burst`), 임의 주소에 GET을 보낸다(`http`). 응답 코드별 건수와 p50, p99를 출력한다 | |
 | `web` | 콘솔 화면. Vue 3, Vite, Pinia. 로그인, 시스템과 프로젝트 사이드바, 이슈 목록과 상세 | 5173(개발 서버) |
 | `sdk-vue` | Vue SDK. 실행 의존성 없음, gzip 3.8KB. 사전 요청 없이 묶어 보내고 탭을 떠날 때 sendBeacon | |
 | `demo-web` | Vue SDK를 붙인 데모 화면. 에러 경로마다 버튼 하나 | 8092 |
+| `deploy` | compose가 쓰는 Prometheus 수집 설정과 경보 규칙, Alertmanager, Grafana 데이터 소스와 대시보드, ClickHouse 지표 설정 | |
 
 ## 빌드와 실행
 
@@ -81,7 +82,23 @@ ERRDECK_TOKEN=edt_... scripts/upload-sourcemaps.sh http://localhost:8081 9002 de
 
 api와 worker는 같은 소스맵 볼륨(`ERRDECK_FILES_DIR`, 기본 `./data/artifacts`)을 써야 한다.
 
-compose로 띄우려면 `./gradlew :demo-api:bootJar :loadgen:installDist` 뒤에 `docker compose --profile demo up -d demo-api` 를 쓴다.
+### compose로 전부 띄우기
+
+```bash
+docker compose --profile core --profile obs up -d --build
+```
+
+| 주소 | 내용 |
+| --- | --- |
+| http://localhost:18080 | ingest |
+| http://localhost:18081 | api |
+| http://localhost:13000 | Grafana(익명 보기, 관리자 admin/admin). 대시보드는 ErrDeck 폴더 |
+| http://localhost:19090 | Prometheus |
+| http://localhost:19093 | Alertmanager |
+
+호스트 포트는 `ERRDECK_INGEST_HOST_PORT`, `ERRDECK_API_HOST_PORT`, `ERRDECK_GRAFANA_PORT`, `ERRDECK_PROMETHEUS_PORT`, `ERRDECK_ALERTMANAGER_PORT` 로 바꾼다. 프로세스의 지표는 컨테이너 안의 관리 포트 8091로만 나오고 호스트에 열지 않는다. 대시보드는 `deploy/grafana/generate.py` 가 만든다. 고칠 때는 이 파일을 고치고 다시 실행한다.
+
+데모 앱을 compose로 띄우려면 `./gradlew :demo-api:bootJar :loadgen:installDist` 뒤에 `docker compose --profile demo up -d demo-api` 를 쓴다.
 
 ## 문서
 

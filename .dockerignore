@@ -1,0 +1,13 @@
+# 이미지 빌드에 보내지 않는 것. 빌드 결과, 의존성 폴더, 로컬 데이터.
+.git
+.gradle
+.idea
+.claude
+**/build
+**/node_modules
+**/dist
+data
+docs
+# demo 프로필의 두 이미지는 호스트에서 만든 결과를 복사한다.
+!demo-api/build/libs
+!loadgen/build/install

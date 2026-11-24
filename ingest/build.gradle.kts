@@ -14,6 +14,8 @@ dependencies {
     implementation("com.github.ben-manes.caffeine:caffeine")
     runtimeOnly("org.postgresql:postgresql")
     runtimeOnly("io.micrometer:micrometer-registry-prometheus")
+    // 가상 스레드가 실행 스레드를 붙잡은 횟수(jvm.threads.virtual.pinned, 14.4). JFR 로 잰다.
+    runtimeOnly("io.micrometer:micrometer-java21")
 
     testImplementation(testFixtures(project(":core")))
     testImplementation("org.springframework.boot:spring-boot-starter-test")

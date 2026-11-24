@@ -9,6 +9,9 @@ dependencies {
     implementation(project(":core"))
     implementation("org.springframework.boot:spring-boot-starter-webmvc")
     implementation("org.springframework.boot:spring-boot-starter-actuator")
+    runtimeOnly("io.micrometer:micrometer-registry-prometheus")
+    // 가상 스레드가 실행 스레드를 붙잡은 횟수(jvm.threads.virtual.pinned, 14.4). JFR 로 잰다.
+    runtimeOnly("io.micrometer:micrometer-java21")
     implementation("org.springframework.boot:spring-boot-starter-jdbc")
     implementation("org.springframework.boot:spring-boot-starter-flyway")
     implementation("org.springframework.boot:spring-boot-starter-data-redis")

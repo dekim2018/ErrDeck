@@ -8,6 +8,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 import javax.crypto.SecretKey;
 import javax.crypto.spec.SecretKeySpec;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.annotation.Order;
@@ -42,7 +43,7 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
  *   <li>{@code /api/internal/**}: 공유 비밀(Alertmanager)</li>
  *   <li>{@code /api/projects/{id}/releases/**} 의 쓰기 요청: 프로젝트 토큰(빌드 스크립트)</li>
  *   <li>{@code /api/**}: 콘솔 사용자의 JWT. {@code /api/auth/**} 만 열어 둔다</li>
- *   <li>그 밖: 상태 확인과 오류 응답만 열고 모두 막는다</li>
+ *   <li>그 밖: 상태 확인, 오류 응답, 관리 포트의 지표만 열고 모두 막는다</li>
  * </ol>
  */
 @Configuration
@@ -112,11 +113,14 @@ public class SecurityConfig {
 
     @Bean
     @Order(4)
-    SecurityFilterChain rest(HttpSecurity http) throws Exception {
+    SecurityFilterChain rest(HttpSecurity http, @Value("${management.server.port:-1}") int managementPort) throws Exception {
         return http.csrf(csrf -> csrf.disable())
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/error", "/actuator/health", "/actuator/health/**").permitAll()
+                        // 지표는 관리 포트로 온 요청만 연다. 관리 포트는 프록시에 연결하지 않는다(13.2). 관리 포트를 나누지 않은 로컬 개발에서는 연다.
+                        .requestMatchers(request -> "/actuator/prometheus".equals(request.getRequestURI())
+                                && (managementPort <= 0 || request.getLocalPort() == managementPort)).permitAll()
                         .anyRequest().denyAll())
                 .build();
     }

@@ -38,6 +38,7 @@ management:
     distribution:
       percentiles-histogram:
         errdeck.e2e.latency: true
+        http.server.requests: true
 
 # 값은 14.3, 14.5, 10.4, 14.9 를 따른다. 17 작업의 자원 실험으로 다시 맞춘다.
 errdeck:

@@ -401,3 +401,105 @@ WORKFLOW 4장은 시안을 2개 이상 만들어 사용자가 고르게 했지�
 
 - **고른 것**: `edt_` + 무작위 32바이트 Base64URL. 저장소에 실수로 올라갔을 때 검색으로 찾기 쉽다.
 
+
+## 16 지표, 대시보드, 경보
+
+### 16-1. 저장소는 프로필 없이, 세 프로세스는 core 프로필로
+
+- **고른 것**: `docker compose up -d` 는 지금처럼 저장소 3개만 띄운다. ingest, worker, api 컨테이너는 `core`, 관측 도구는 `obs` 프로필이다.
+- **다른 선택지**: 저장소까지 `core` 에 넣기.
+- **이유**: 호스트에서 `bootRun` 으로 개발하는 흐름과 테스트(저장소 3개만 필요)를 바꾸지 않는다. `--profile core --profile obs` 를 붙이면 끝 기준의 명령과 같다.
+
+### 16-2. 이미지는 컨테이너 안에서 Gradle 로 빌드한다
+
+- **고른 것**: 다단계 Dockerfile. JDK 이미지에서 `bootJar` 를 만들고 JRE 이미지로 옮긴다. Gradle 캐시는 BuildKit 캐시로 두고 `sharing=locked` 로 세 이미지가 차례로 쓴다.
+- **다른 선택지**: 호스트에서 만든 jar 를 복사하기(demo-api, loadgen 의 방식).
+- **이유**: 끝 기준이 "명령 한 번"이다. 셋을 함께 빌드하면 캐시를 동시에 쓰다 실패해 잠갔다. 첫 빌드는 2분 남짓 걸린다.
+- **감수하는 것**: 소스가 바뀌면 `COPY . .` 뒤가 전부 다시 돈다. 25 작업에서 CI 가 이미지를 만들게 되면 레이어를 나눈다.
+
+### 16-3. 지표는 compose 에서만 관리 포트 8091 로 나눈다
+
+- **고른 것**: compose 가 `MANAGEMENT_SERVER_PORT=8091` 을 주고 호스트에 열지 않는다. 호스트에서 띄우는 로컬 개발은 서비스 포트에서 그대로 낸다. api 는 거부 체인에서 `/actuator/prometheus` 를 관리 포트로 온 요청에만 연다(관리 포트가 없으면 연다).
+- **이유**: 13.2. 개발 중에는 포트 하나로 보는 편이 편하다.
+
+### 16-4. Alertmanager 는 Authorization 헤더로 공유 비밀을 보낸다
+
+- **고른 것**: 내부 비밀 필터가 `X-ErrDeck-Internal-Secret` 과 `Authorization: Bearer` 를 둘 다 받는다. Alertmanager 설정은 환경 변수를 펼치지 않으므로 compose 가 시작할 때 비밀을 파일로 쓰고 `credentials_file` 로 읽게 한다.
+- **다른 선택지**: Alertmanager 의 임의 헤더 설정, 설정 파일에 비밀을 적기.
+- **이유**: Authorization 헤더는 Alertmanager 의 모든 판에서 된다. 비밀을 저장소에 적지 않는다.
+
+### 16-5. 대시보드는 파이썬 생성기가 원본이다
+
+- **고른 것**: `deploy/grafana/generate.py` 가 JSON 5개를 만들고, 둘 다 저장소에 둔다.
+- **다른 선택지**: 그라파나 화면에서 만든 JSON 을 내보내 손으로 관리하기.
+- **이유**: 내보낸 JSON 은 수천 줄이라 리뷰할 수 없다. 패널 하나가 함수 한 줄이다.
+
+### 16-6. 13.4 의 지표 12개 중 둘은 그 기능을 만드는 작업에서 붙인다
+
+- **고른 것**: `errdeck_uptime_schedule_lag_seconds` 는 20 작업(업타임), `errdeck_notifications_total` 은 21 작업(알림)에서 만든다. 이번에는 worker 단계에 `restore` 를 나눠 넣고, api 에 받은 경보를 세는 `errdeck_alerts_received_total{alertname, status}` 를 더했다.
+- **이유**: 하는 일이 없는 지표를 미리 만들면 0 인지 고장인지 구별할 수 없다.
+
+### 16-7. 호스트 포트
+
+- **고른 것**: ingest 18080, api 18081, Grafana 13000, Prometheus 19090, Alertmanager 19093. 전부 환경 변수로 바꾼다. worker 는 호스트에 열지 않는다.
+- **이유**: 8080~8087 은 팬파라이브와 CoPage 가 쓴다(WORKFLOW 3장). 3000, 9090 도 다른 도구가 흔히 쓴다.
+
+### 16-8. 로컬 Grafana 는 익명 보기를 연다
+
+- **고른 것**: 익명 사용자는 Viewer. 관리자는 admin/admin(환경 변수로 바꿈). 홈은 전체 개요 대시보드.
+- **이유**: 12.4 의 콘솔 링크가 로그인 없이 열린다. 배포에서는 25 작업에서 닫는다.
+
+### 16-9. cAdvisor 는 지표를 줄이고 compose 서비스 이름을 붙인다
+
+- **고른 것**: 디스크, 네트워크, CPU 별, 프로세스 지표를 끈다. `com.docker.compose.service` 라벨만 남겨 Prometheus 에서 `service` 라벨로 바꾼다. 대시보드와 CPU 제한 경보가 이 이름을 쓴다.
+- **이유**: 메모리 상한 128MB(14.7). 컨테이너 ID 대신 서비스 이름으로 본다.
+
+### 16-10. 컨테이너 상태 확인은 bash 의 /dev/tcp 로 한다
+
+- **고른 것**: JRE 이미지에 curl 이 없어 `bash -c 'exec 3<>/dev/tcp/127.0.0.1/8091 ...'` 로 `/actuator/health` 를 부른다. ingest 와 worker 는 api 가 건강해진 뒤 뜬다(스키마를 api 가 만든다).
+- **다른 선택지**: 이미지에 curl 을 설치하기.
+- **이유**: 이미지에 도구를 더하지 않는다.
+
+### 16-11. 힙은 최소와 최대를 같게 둔다
+
+- **고른 것**: `-Xms` 와 `-Xmx` 를 같게(ingest 160m, worker 448m, api 256m).
+- **이유**: 컨테이너 상한 안에서 힙이 얼마까지 크는지 처음부터 보인다. 실행 중에 힙을 늘리느라 GC 가 도는 일이 없다. 대신 시작 직후의 메모리 사용이 크게 보인다.
+
+### 16-12. ingest 동시 연결 2,000 은 톰캣 설정으로
+
+- **고른 것**: `server.tomcat.max-connections=2000`, `accept-count=100`.
+- **이유**: 14.3. 가상 스레드에는 스레드 풀이라는 천장이 없어 연결 수가 곧 힙에 쌓이는 요청 수다. 넘는 연결은 커널 대기열 100개까지 기다리고 그 뒤로는 거절된다.
+
+### 16-13. Docker Desktop 에서 안 되는 설정은 뺀다
+
+- **고른 것**: node-exporter 의 루트 마운트에서 `rslave` 를 뺐다. Docker Desktop(mac)은 루트가 공유 마운트가 아니라 컨테이너가 뜨지 않는다.
+- **감수하는 것**: mac 에서 node-exporter 가 보는 것은 Docker Desktop 의 가상 머신이다. 오라클 서버(25 작업)에서는 `rslave` 를 다시 넣는다.
+
+### 16-14. JVM 컨테이너에 MALLOC_ARENA_MAX=2
+
+- **고른 것**: ingest, worker, api 에 `MALLOC_ARENA_MAX=2`.
+- **이유**: 처음 띄웠을 때 api 의 작업 집합이 상한 512MB 중 457MB였다(힙 256 + 힙 밖 99). glibc 가 스레드마다 메모리 구역을 만든 몫이다. 넣은 뒤 api 364MB, ingest 315→232MB, worker 429→315MB.
+
+### 16-15. Go 로 만든 관측 도구에 GOMAXPROCS=1
+
+- **고른 것**: Prometheus, Grafana, Alertmanager, exporter 4종에 `GOMAXPROCS=1`.
+- **이유**: Go 도 JVM 처럼 서버의 코어 수(10)만큼 스레드를 돌린다. 상한 0.25~0.5 에서 쉬는 중에도 CPU 제한 경보가 울렸다(Grafana 제한 구간 42%, CPU 43%). 넣은 뒤 Grafana CPU 0.6%. 14.2 의 이야기가 JVM 밖에서도 그대로 맞았다.
+
+### 16-16. ClickHouse 는 서버 메모리 상한을 컨테이너의 75% 로
+
+- **고른 것**: `max_server_memory_usage_to_ram_ratio=0.75`(1.5GB), 마크 캐시 256MB, 비압축 캐시 끔. 병합 스레드 수는 기본값을 둔다.
+- **이유**: 기본값으로는 추적 메모리가 280MB인데 상주 메모리가 1.63GB였다(할당기가 돌려주지 않은 몫). 상한에 닿기 전에 쿼리가 실패해야 컨테이너가 죽지 않는다. 병합 스레드를 4로 줄이면 변경 실행 기준값(20)보다 작아 서버가 뜨지 않는다. 줄일지는 17 작업의 CPU 제한 지표로 정한다.
+
+### 16-17. cAdvisor 에 docker 와 containerd 소켓을 따로 붙인다
+
+- **고른 것**: `/var/run` 대신 `/var/run/docker.sock` 과 `/run/containerd/containerd.sock` 을 붙인다. compose 프로젝트 이름이 errdeck 인 컨테이너에만 `service` 라벨을 단다.
+- **이유**: Docker Desktop 에서는 `/var/run` 을 붙여도 소켓이 보이지 않았고, Docker 29 는 containerd 이미지 저장소를 써서 containerd 에도 물어야 컨테이너를 찾았다. 같은 Docker 에 CoPage 의 `postgres`, `redis` 가 있어 서비스 이름만으로는 섞였다.
+
+### 16-18. 모든 컨테이너에 restart: unless-stopped
+
+- **이유**: Docker 를 다시 켰을 때 저장소만 안 떠서 api 와 worker 가 계속 죽고 다시 뜨는 일이 있었다.
+
+### 16-19. 가상 스레드 붙잡힘 지표는 micrometer-java21 로
+
+- **고른 것**: 가상 스레드를 쓰는 ingest 와 api 에 `micrometer-java21` 을 더한다. Spring Boot 가 알아서 `jvm.threads.virtual.pinned`(JFR 기반)를 등록한다.
+- **이유**: 14.4 가 대시보드에 올리라고 한 지표인데 기본 JVM 지표에는 없다.

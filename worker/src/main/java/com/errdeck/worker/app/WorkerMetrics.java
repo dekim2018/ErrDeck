@@ -17,7 +17,7 @@ import org.springframework.stereotype.Component;
 public class WorkerMetrics {
 
     public enum Stage {
-        DECOMPRESS, FINGERPRINT, WRITE
+        DECOMPRESS, RESTORE, FINGERPRINT, WRITE
     }
 
     /** 받은 이벤트가 어떻게 끝났는지. 넷을 더하면 받은 이벤트 수다. */

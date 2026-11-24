@@ -1,5 +1,7 @@
 package com.errdeck.api.in.web;
 
+import io.micrometer.core.instrument.MeterRegistry;
+import java.util.List;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -17,10 +19,24 @@ public class InternalController {
 
     private static final Logger log = LoggerFactory.getLogger(InternalController.class);
 
+    private final MeterRegistry registry;
+
+    public InternalController(MeterRegistry registry) {
+        this.registry = registry;
+    }
+
     @PostMapping("/api/internal/alerts")
     @ResponseStatus(HttpStatus.ACCEPTED)
     public void alerts(@RequestBody Map<String, Object> payload) {
-        log.info("Alertmanager 경보를 받았다: status={}, alerts={}", payload.get("status"),
-                payload.get("alerts") instanceof java.util.List<?> list ? list.size() : 0);
+        List<?> alerts = payload.get("alerts") instanceof List<?> list ? list : List.of();
+        for (Object alert : alerts) {
+            if (alert instanceof Map<?, ?> map && map.get("labels") instanceof Map<?, ?> labels) {
+                String status = String.valueOf(map.get("status"));
+                String name = String.valueOf(labels.get("alertname"));
+                log.warn("경보 {}: {} {}", status, name, labels);
+                // 경보 이름은 규칙 파일의 8개뿐이라 태그로 넣어도 시계열이 늘지 않는다(13.4).
+                registry.counter("errdeck.alerts.received", "alertname", name, "status", status).increment();
+            }
+        }
     }
 }
