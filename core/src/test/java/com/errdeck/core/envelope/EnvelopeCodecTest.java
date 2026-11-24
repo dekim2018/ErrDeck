@@ -104,8 +104,14 @@ class EnvelopeCodecTest {
     }
 
     @Test
-    void gzip이_아니면_거부한다() {
-        assertThrows(EnvelopeException.class, () -> codec.decode(example));
+    void 압축하지_않은_본문도_그대로_읽는다() {
+        // 브라우저가 탭을 닫을 때 sendBeacon 으로 보낸 봉투다.
+        assertEquals(codec.read(example), codec.decode(example));
+    }
+
+    @Test
+    void gzip_머리로_시작하지만_망가진_본문은_거부한다() {
+        assertThrows(EnvelopeException.class, () -> codec.decode(new byte[] {0x1f, (byte) 0x8b, 1, 2, 3}));
     }
 
     @Test
