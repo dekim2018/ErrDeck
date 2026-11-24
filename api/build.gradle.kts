@@ -1,4 +1,4 @@
-// 조회와 설정 프로세스. PostgreSQL 스키마(Flyway)도 이 프로세스가 적용한다.
+// 조회와 설정 프로세스. 콘솔 로그인과 권한(15장)을 맡고, PostgreSQL 과 ClickHouse 스키마도 이 프로세스가 적용한다.
 plugins {
     java
     id("org.springframework.boot") version "4.1.1"
@@ -11,6 +11,10 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-actuator")
     implementation("org.springframework.boot:spring-boot-starter-jdbc")
     implementation("org.springframework.boot:spring-boot-starter-flyway")
+    implementation("org.springframework.boot:spring-boot-starter-data-redis")
+    implementation("org.springframework.boot:spring-boot-starter-security")
+    implementation("org.springframework.boot:spring-boot-starter-oauth2-resource-server")
+    implementation("org.springframework.boot:spring-boot-starter-validation")
     implementation("org.flywaydb:flyway-database-postgresql")
     runtimeOnly("org.postgresql:postgresql")
 

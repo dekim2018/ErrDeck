@@ -8,13 +8,20 @@ import org.testcontainers.containers.wait.strategy.Wait;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
 /**
- * 테스트가 함께 쓰는 PostgreSQL 과 ClickHouse 컨테이너. 테스트 실행 동안 한 번만 띄운다.
+ * 테스트가 함께 쓰는 PostgreSQL, ClickHouse, Redis 컨테이너. 테스트 실행 동안 한 번만 띄운다.
  * 스키마는 api 가 뜰 때 Flyway 와 ClickHouse 실행기가 만든다.
  */
 public abstract class TestInfra {
 
     public static final PostgreSQLContainer POSTGRES = startPostgres();
     public static final GenericContainer<?> CLICKHOUSE = startClickHouse();
+    public static final GenericContainer<?> REDIS = startRedis();
+
+    private static GenericContainer<?> startRedis() {
+        GenericContainer<?> container = new GenericContainer<>("redis:7").withExposedPorts(6379);
+        container.start();
+        return container;
+    }
 
     private static PostgreSQLContainer startPostgres() {
         PostgreSQLContainer container = new PostgreSQLContainer("postgres:17");
@@ -44,5 +51,7 @@ public abstract class TestInfra {
         registry.add("spring.datasource.username", POSTGRES::getUsername);
         registry.add("spring.datasource.password", POSTGRES::getPassword);
         registry.add("errdeck.clickhouse.url", TestInfra::clickHouseUrl);
+        registry.add("spring.data.redis.host", REDIS::getHost);
+        registry.add("spring.data.redis.port", () -> REDIS.getMappedPort(6379));
     }
 }
