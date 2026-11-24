@@ -31,6 +31,11 @@ public class ClickHouseConfig {
                 properties.database());
     }
 
+    @Bean
+    com.errdeck.api.out.clickhouse.ClickHouseEventStats eventStats(com.errdeck.api.out.clickhouse.ClickHouseReader reader) {
+        return new com.errdeck.api.out.clickhouse.ClickHouseEventStats(reader);
+    }
+
     /** PostgreSQL 은 Flyway 가, ClickHouse 는 이 실행기가 api 가 뜰 때 스키마를 맞춘다. 실패하면 api 는 뜨지 않는다. */
     @Bean
     @ConditionalOnBooleanProperty(name = "errdeck.clickhouse.migrate", matchIfMissing = true)

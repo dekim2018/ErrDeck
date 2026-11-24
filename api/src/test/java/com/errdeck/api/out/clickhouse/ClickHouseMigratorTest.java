@@ -30,7 +30,7 @@ class ClickHouseMigratorTest {
     void 파일은_번호_순서대로_읽고_번호는_겹치지_않는다() {
         List<ClickHouseMigrator.Migration> migrations = ClickHouseMigrator.load();
 
-        assertThat(migrations).extracting(ClickHouseMigrator.Migration::version).containsExactly(1, 2, 3, 4, 5, 6, 7);
+        assertThat(migrations).extracting(ClickHouseMigrator.Migration::version).containsExactly(1, 2, 3, 4, 5, 6, 7, 8);
     }
 
     @Test

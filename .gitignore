@@ -30,3 +30,6 @@ playwright-report/
 
 # Claude Code 개인 설정
 .claude/settings.local.json
+
+# 브라우저 자동화 도구의 스냅샷과 화면
+.playwright-mcp/

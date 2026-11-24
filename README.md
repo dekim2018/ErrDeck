@@ -6,7 +6,7 @@ Java 25, Spring Boot 4.1, Spring Security 7.1, Vue 3을 쓴다. 저장소는 Pos
 
 ## 지금 상태
 
-11 작업(로그인과 권한)까지 했다. core에 DSN 해석, 봉투 형식, 이벤트 모델, 지문 규칙 9개(값을 지운 메시지, 프록시와 람다 이름 정리, 앱 프레임 판정)가 있다. ingest는 `POST /ingest/{projectId}/envelope` 로 봉투를 받아 키와 출처를 확인하고, Lua 스크립트 하나로 프로젝트 한도 차감, 대기열 길이 확인, Redis 스트림 적재를 한다. api는 콘솔 사용자의 가입, 로그인, 토큰 재발급과 시스템 단위 권한(VIEWER, MEMBER, ADMIN, OWNER)을 맡고, 시스템, 구성원, 프로젝트, DSN 키를 관리하는 API를 둔다. 뜰 때 PostgreSQL 스키마(Flyway, 테이블 16개)와 ClickHouse 스키마(테이블 5개, 분 단위 집계 뷰, worker와 api용 사용자)를 적용한다. loadgen으로 지속 부하와 폭주를 걸 수 있고, 폭주에서 대기열이 상한 20,000에서 멈추는 것을 확인했다([docs/EXPERIMENTS.md](docs/EXPERIMENTS.md)). worker는 대기열을 읽어 이벤트의 지문을 계산하고, 지문으로 이슈를 찾거나 만들고, 받은 이벤트 전부의 건수와 이슈별 분당 100건까지의 원본을 ClickHouse에 묶어 쓴 뒤 확인 처리한다. 이미 처리한 event_id는 거르고, 처리할 수 없는 원문은 격리한다. 모든 큐에 길이가 있어 ClickHouse가 멈추면 대기열이 상한에서 멈추고 ingest가 503을 준다. sdk-spring은 감시 대상 Spring Boot 앱(서블릿, WebFlux)에서 500번대로 끝난 예외, 스케줄과 비동기 작업의 예외, `log.error` 의 예외를 잡아 묶어 보낸다. 진행 상황은 [docs/WORKFLOW.md](docs/WORKFLOW.md)의 5장에 있다.
+12 작업(콘솔 뼈대와 이슈 화면)까지 했다. 3단계(스프링 SDK와 콘솔 뼈대)가 끝났다. core에 DSN 해석, 봉투 형식, 이벤트 모델, 지문 규칙 9개(값을 지운 메시지, 프록시와 람다 이름 정리, 앱 프레임 판정)가 있다. ingest는 `POST /ingest/{projectId}/envelope` 로 봉투를 받아 키와 출처를 확인하고, Lua 스크립트 하나로 프로젝트 한도 차감, 대기열 길이 확인, Redis 스트림 적재를 한다. api는 콘솔 사용자의 가입, 로그인, 토큰 재발급과 시스템 단위 권한(VIEWER, MEMBER, ADMIN, OWNER)을 맡고, 시스템, 구성원, 프로젝트, DSN 키를 관리하는 API를 둔다. 뜰 때 PostgreSQL 스키마(Flyway, 테이블 16개)와 ClickHouse 스키마(테이블 5개, 분 단위 집계 뷰, worker와 api용 사용자)를 적용한다. loadgen으로 지속 부하와 폭주를 걸 수 있고, 폭주에서 대기열이 상한 20,000에서 멈추는 것을 확인했다([docs/EXPERIMENTS.md](docs/EXPERIMENTS.md)). worker는 대기열을 읽어 이벤트의 지문을 계산하고, 지문으로 이슈를 찾거나 만들고, 받은 이벤트 전부의 건수와 이슈별 분당 100건까지의 원본을 ClickHouse에 묶어 쓴 뒤 확인 처리한다. 이미 처리한 event_id는 거르고, 처리할 수 없는 원문은 격리한다. 모든 큐에 길이가 있어 ClickHouse가 멈추면 대기열이 상한에서 멈추고 ingest가 503을 준다. sdk-spring은 감시 대상 Spring Boot 앱(서블릿, WebFlux)에서 500번대로 끝난 예외, 스케줄과 비동기 작업의 예외, `log.error` 의 예외를 잡아 묶어 보낸다. 진행 상황은 [docs/WORKFLOW.md](docs/WORKFLOW.md)의 5장에 있다.
 
 ## 모듈
 
@@ -19,8 +19,9 @@ Java 25, Spring Boot 4.1, Spring Security 7.1, Vue 3을 쓴다. 저장소는 Pos
 | `sdk-spring` | Spring Boot Starter SDK. `errdeck.dsn` 만 설정하면 예외를 잡아 보낸다. 큐 1,000, 전송 스레드 1개, 같은 에러 접기, 거절 응답 따르기 | |
 | `demo-api` | 데모 앱. Starter SDK를 붙이고 처리된 예외, 처리되지 않은 예외, 비동기, 스케줄, 400번대 예외를 내는 엔드포인트를 둔다 | 8090 |
 | `loadgen` | 부하와 폭주를 만드는 명령줄 도구. 실제 봉투 형식으로 정해진 속도를 지켜 보내고(`sustained`, `burst`), 임의 주소에 GET을 보낸다(`http`). 응답 코드별 건수와 p50, p99를 출력한다 | |
+| `web` | 콘솔 화면. Vue 3, Vite, Pinia. 로그인, 시스템과 프로젝트 사이드바, 이슈 목록과 상세 | 5173(개발 서버) |
 
-`sdk-vue`(Vue SDK)와 `web`(콘솔 화면)은 뒤 작업에서 더한다.
+`sdk-vue`(Vue SDK)는 14 작업에서 더한다.
 
 ## 빌드와 실행
 
@@ -63,6 +64,13 @@ docker compose exec -T postgres psql -U errdeck < scripts/demo/seed.sql
 ./gradlew :demo-api:bootRun
 curl -s localhost:8090/demo/handled/1      # 500, 이슈가 된다
 curl -s localhost:8090/demo/bad-request    # 400, 이슈가 되지 않는다
+```
+
+콘솔 화면을 띄운다. 처음 가입한 사용자가 관리자가 된다. 데모 앱의 이슈를 보려면 그 사용자를 `데모 앱` 시스템의 구성원으로 넣는다.
+
+```bash
+cd web && npm ci && ERRDECK_API=http://localhost:8081 npm run dev   # http://localhost:5173
+docker compose exec postgres psql -U errdeck -c "insert into system_members (system_id, user_id, role) select s.id, u.id, 'OWNER' from systems s, users u where s.name = '데모 앱' and u.email = '가입한 이메일'"
 ```
 
 compose로 띄우려면 `./gradlew :demo-api:bootJar :loadgen:installDist` 뒤에 `docker compose --profile demo up -d demo-api` 를 쓴다.
