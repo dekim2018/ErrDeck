@@ -1,0 +1,18 @@
+# 경보를 묶어 api 의 웹훅으로 넘긴다(13.6). api 는 21 작업에서 이것을 알림 채널로 내보낸다.
+route:
+  receiver: errdeck-api
+  group_by: [alertname, job, service]
+  group_wait: 10s
+  group_interval: 1m
+  repeat_interval: 4h
+
+receivers:
+  - name: errdeck-api
+    webhook_configs:
+      - url: http://api:8081/api/internal/alerts
+        send_resolved: true
+        http_config:
+          authorization:
+            type: Bearer
+            # compose 가 ERRDECK_INTERNAL_SECRET 을 이 파일로 써 둔다.
+            credentials_file: /alertmanager/internal-secret

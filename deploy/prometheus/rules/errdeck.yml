@@ -1,0 +1,73 @@
+# 13.6 의 경보 규칙 8개. 값은 처음 값이고 17 작업의 실험으로 고친다.
+groups:
+  - name: errdeck
+    rules:
+      - alert: ProcessDown
+        expr: up{job=~"ingest|worker|api"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.job }} 이 1분 동안 응답하지 않는다"
+
+      - alert: QueueLagging
+        expr: max by (stream) (errdeck_queue_oldest_age_seconds) > 30
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.stream }} 대기열의 가장 오래된 항목이 {{ $value | humanizeDuration }} 기다렸다. worker 가 따라가지 못한다"
+
+      - alert: IngestRejecting
+        expr: sum(rate(errdeck_ingest_requests_total{result=~"queue_full|unavailable"}[1m])) > 0
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "ingest 가 1분 넘게 503 을 응답한다. 대기열이 가득 찼거나 Redis 가 느리다"
+
+      - alert: CpuThrottled
+        expr: |
+          sum by (service) (rate(container_cpu_cfs_throttled_periods_total{service!=""}[5m]))
+            / sum by (service) (rate(container_cpu_cfs_periods_total{service!=""}[5m])) > 0.25
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.service }} 의 CPU 제한 구간이 {{ $value | humanizePercentage }}. CPU 상한이 낮다(14.2)"
+
+      - alert: HeapHigh
+        # 최대값이 정해지지 않은 영역(-1)은 빼고 더한다.
+        expr: |
+          sum by (job) (jvm_memory_used_bytes{area="heap"})
+            / sum by (job) (jvm_memory_max_bytes{area="heap"} > 0) > 0.9
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.job }} 의 힙 사용률이 {{ $value | humanizePercentage }}"
+
+      - alert: ConnectionPoolWaiting
+        expr: max by (job, pool) (hikaricp_connections_pending) > 0
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.job }} 의 커넥션 풀에 대기가 1분째 있다. 풀이 작거나 쿼리가 느리다"
+
+      - alert: DiskLow
+        expr: |
+          node_filesystem_avail_bytes{fstype!~"tmpfs|overlay|squashfs|ramfs|autofs"}
+            / node_filesystem_size_bytes{fstype!~"tmpfs|overlay|squashfs|ramfs|autofs"} < 0.15
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.mountpoint }} 의 남은 공간이 15% 미만이다. ClickHouse 보존 기간을 줄인다"
+
+      - alert: QuarantineGrowing
+        expr: increase(errdeck_events_processed_total{outcome="quarantined"}[10m]) > 0
+        labels:
+          severity: warning
+        annotations:
+          summary: "10분 동안 격리가 {{ $value }} 건 늘었다. SDK 와 worker 의 형식이 어긋났다"
