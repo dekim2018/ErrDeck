@@ -6,7 +6,7 @@ Java 25, Spring Boot 4.1, Spring Security 7.1, Vue 3을 쓴다. 저장소는 Pos
 
 ## 지금 상태
 
-08 작업(이슈, 집계, 중복, 격리)까지 했다. core에 DSN 해석, 봉투 형식, 이벤트 모델, 지문 규칙 9개(값을 지운 메시지, 프록시와 람다 이름 정리, 앱 프레임 판정)가 있다. ingest는 `POST /ingest/{projectId}/envelope` 로 봉투를 받아 키와 출처를 확인하고, Lua 스크립트 하나로 프로젝트 한도 차감, 대기열 길이 확인, Redis 스트림 적재를 한다. api는 뜰 때 PostgreSQL 스키마(Flyway, 테이블 16개)와 ClickHouse 스키마(테이블 5개, 분 단위 집계 뷰, worker와 api용 사용자)를 적용한다. loadgen으로 지속 부하와 폭주를 걸 수 있고, 폭주에서 대기열이 상한 20,000에서 멈추는 것을 확인했다([docs/EXPERIMENTS.md](docs/EXPERIMENTS.md)). worker는 대기열을 읽어 이벤트의 지문을 계산하고, 지문으로 이슈를 찾거나 만들고, 받은 이벤트 전부의 건수와 이슈별 분당 100건까지의 원본을 ClickHouse에 묶어 쓴 뒤 확인 처리한다. 이미 처리한 event_id는 거르고, 처리할 수 없는 원문은 격리한다. 모든 큐에 길이가 있어 ClickHouse가 멈추면 대기열이 상한에서 멈추고 ingest가 503을 준다. 진행 상황은 [docs/WORKFLOW.md](docs/WORKFLOW.md)의 5장에 있다.
+09 작업(Starter SDK)까지 했다. core에 DSN 해석, 봉투 형식, 이벤트 모델, 지문 규칙 9개(값을 지운 메시지, 프록시와 람다 이름 정리, 앱 프레임 판정)가 있다. ingest는 `POST /ingest/{projectId}/envelope` 로 봉투를 받아 키와 출처를 확인하고, Lua 스크립트 하나로 프로젝트 한도 차감, 대기열 길이 확인, Redis 스트림 적재를 한다. api는 뜰 때 PostgreSQL 스키마(Flyway, 테이블 16개)와 ClickHouse 스키마(테이블 5개, 분 단위 집계 뷰, worker와 api용 사용자)를 적용한다. loadgen으로 지속 부하와 폭주를 걸 수 있고, 폭주에서 대기열이 상한 20,000에서 멈추는 것을 확인했다([docs/EXPERIMENTS.md](docs/EXPERIMENTS.md)). worker는 대기열을 읽어 이벤트의 지문을 계산하고, 지문으로 이슈를 찾거나 만들고, 받은 이벤트 전부의 건수와 이슈별 분당 100건까지의 원본을 ClickHouse에 묶어 쓴 뒤 확인 처리한다. 이미 처리한 event_id는 거르고, 처리할 수 없는 원문은 격리한다. 모든 큐에 길이가 있어 ClickHouse가 멈추면 대기열이 상한에서 멈추고 ingest가 503을 준다. sdk-spring은 감시 대상 Spring Boot 앱(서블릿, WebFlux)에서 500번대로 끝난 예외, 스케줄과 비동기 작업의 예외, `log.error` 의 예외를 잡아 묶어 보낸다. 진행 상황은 [docs/WORKFLOW.md](docs/WORKFLOW.md)의 5장에 있다.
 
 ## 모듈
 
@@ -16,7 +16,7 @@ Java 25, Spring Boot 4.1, Spring Security 7.1, Vue 3을 쓴다. 저장소는 Pos
 | `ingest` | 수집 프로세스. 크기, DSN 키, 출처를 확인하고 한도 안에서 봉투를 Redis 스트림에 넣는다. 지표는 `/actuator/prometheus` | 8080 |
 | `worker` | 처리 프로세스. 대기열을 읽어 지문을 계산하고 이슈를 찾거나 만들며, 건수와 원본 표본을 ClickHouse에 묶어 쓴다. 웹 서버는 상태 확인과 지표에만 쓴다 | 8082 |
 | `api` | 조회와 설정 프로세스. PostgreSQL 스키마(Flyway)와 ClickHouse 스키마(번호 붙인 SQL 실행기)를 적용한다 | 8081 |
-| `sdk-spring` | Spring Boot Starter SDK | |
+| `sdk-spring` | Spring Boot Starter SDK. `errdeck.dsn` 만 설정하면 예외를 잡아 보낸다. 큐 1,000, 전송 스레드 1개, 같은 에러 접기, 거절 응답 따르기 | |
 | `loadgen` | 부하와 폭주를 만드는 명령줄 도구. 실제 봉투 형식으로 정해진 속도를 지켜 보내고 응답 코드별 건수와 p50, p99를 출력한다 | |
 
 `sdk-vue`(Vue SDK)와 `web`(콘솔 화면)은 뒤 작업에서 더한다.
@@ -61,6 +61,7 @@ docker compose exec redis redis-cli XLEN errdeck:stream:events
 - [docs/WORKFLOW.md](docs/WORKFLOW.md): 작업 절차와 작업 목록
 - [docs/adr/](docs/adr/README.md): 결정 기록
 - [docs/EXPERIMENTS.md](docs/EXPERIMENTS.md): 부하, 자원, 장애 실험의 결과
+- [docs/CHOICES.md](docs/CHOICES.md): 작업 중에 추천안으로 정한 것과 그 이유. 나중에 검토할 목록
 
 ## 작업 방식
 

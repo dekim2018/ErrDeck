@@ -96,3 +96,11 @@ SDK를 붙인 것과 안 붙인 것의 요청 시간 차이, SDK 큐의 최대 �
 ## 구현하면서 바뀐 점
 
 - **에러와 트랜잭션은 다른 봉투로 보낸다**(03 작업): ingest는 본문을 풀지 않으므로 봉투의 종류를 쿼리로 알린다. 트랜잭션 봉투는 `?kind=tx` 를 붙이고, 에러와 client_report 봉투는 붙이지 않는다(5장 끝).
+- **Spring Starter의 구현**(09 작업): 코드는 `sdk-spring` 에 있다. 의존성을 추가하고 `errdeck.dsn` 을 설정하면 켜지고, `errdeck.enabled=false` 로 끈다. 큐 길이, 묶음 크기, 간격, 제한 시간, 접기 구간과 기준도 `errdeck.*` 로 바꿀 수 있다. 감시 대상에 있는 것(서블릿, WebFlux, Logback)에만 붙는다.
+- **WebFlux(gateway)**: `WebFilter` 가 처리되지 않고 올라온 서버 오류만 보낸다. 컨트롤러의 `@ExceptionHandler` 가 처리한 예외와 사용자 ID는 보내지 않는다. 이유는 `docs/CHOICES.md` 09-1, 09-2.
+- **접기의 비교 기준**: 예외 클래스와 위쪽 20프레임(줄 번호 포함)을 요청 스레드에서 그대로 비교한다. 지문 규칙을 쓰지 않는다(CHOICES 09-3).
+- **같은 예외 객체를 여러 경로가 잡아도 한 번만 보낸다**(CHOICES 09-4).
+- **버린 이유**: client_report의 이유는 `queue_overflow`, `rate_limited`, `queue_full`, `too_large`, `network_error`, `unauthorized` 여섯 가지다.
+
+그 밖에 이 작업에서 정한 것은 [CHOICES.md](./CHOICES.md)의 09 절에 있다.
+
