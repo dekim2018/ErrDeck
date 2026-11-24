@@ -12,6 +12,11 @@ spring:
     password: ${ERRDECK_DB_PASSWORD:errdeck}
     hikari:
       maximum-pool-size: 10
+  data:
+    redis:
+      host: ${ERRDECK_REDIS_HOST:localhost}
+      port: ${ERRDECK_REDIS_PORT:16379}
+      timeout: 1s
 
 server:
   port: ${ERRDECK_API_PORT:8081}
@@ -35,3 +40,27 @@ errdeck:
     worker-password: ${ERRDECK_CLICKHOUSE_WORKER_PASSWORD:errdeck_worker}
     api-user: errdeck_api
     api-password: ${ERRDECK_CLICKHOUSE_API_PASSWORD:errdeck_api}
+  auth:
+    # HS256 서명 키. 32바이트 이상. 로컬 개발용 기본값이며 배포 환경은 반드시 ERRDECK_JWT_SECRET 으로 바꾼다(25 작업).
+    jwt-secret: ${ERRDECK_JWT_SECRET:local-development-only-secret-change-me-0123456789}
+    issuer: errdeck
+    audience: errdeck-console
+    access-token-ttl: 15m
+    refresh-token-ttl: 14d
+    # 쓴 리프레시 토큰이 이 시간 안에 다시 오면 탈취가 아니라 동시 재발급(탭 두 개, 재시도)으로 본다.
+    refresh-reuse-grace: 10s
+    # 로컬은 http 라 false. 배포 환경은 true(25 작업).
+    secure-cookie: ${ERRDECK_SECURE_COOKIE:false}
+    signup-enabled: ${ERRDECK_SIGNUP_ENABLED:true}
+    # 로그인 실패가 반복되면 응답을 늦춘다(15.2).
+    failures-before-delay: 5
+    failure-delay: 1s
+    failure-window: 10m
+    # Alertmanager 가 /api/internal/** 에 보내는 공유 비밀(15.1).
+    internal-secret: ${ERRDECK_INTERNAL_SECRET:local-internal-secret}
+  console:
+    # DSN 을 만들 때 쓰는 ingest 의 바깥 주소.
+    ingest-url: ${ERRDECK_PUBLIC_INGEST_URL:http://localhost:8080}
+    # 콘솔 개발 서버(Vite)가 API 를 부를 수 있는 출처.
+    allowed-origins: ${ERRDECK_CONSOLE_ORIGINS:http://localhost:5173}
+
