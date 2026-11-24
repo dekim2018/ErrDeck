@@ -1,6 +1,7 @@
 package com.errdeck.loadgen;
 
 import com.errdeck.core.dsn.Dsn;
+import java.net.URI;
 import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
@@ -8,7 +9,9 @@ import java.util.Map;
 /**
  * 명령줄 옵션.
  *
- * @param rate         초당 보낼 이벤트 수
+ * @param dsn          봉투를 보낼 곳. http 시나리오에서는 없다
+ * @param url          http 시나리오에서 GET 을 보낼 주소
+ * @param rate         초당 보낼 이벤트 수. http 시나리오에서는 초당 요청 수
  * @param fingerprints 지속 부하에서 섞을 지문 종류 수. 폭주는 항상 1이다
  * @param batch        봉투 하나에 담을 이벤트 수. Spring SDK 는 최대 50건을 묶는다(11.2)
  * @param maxInFlight  응답을 기다리는 요청의 상한. 넘으면 보내지 않고 건수만 센다. 도구가 먼저 쓰러지지 않게 한다
@@ -17,6 +20,7 @@ import java.util.Map;
 public record Options(
         Scenario scenario,
         Dsn dsn,
+        URI url,
         int rate,
         Duration duration,
         int fingerprints,
@@ -26,6 +30,7 @@ public record Options(
 
     static final String USAGE = """
             사용법: loadgen <sustained|burst> --dsn=<DSN> [옵션]
+                   loadgen http --url=<주소> [옵션]
               --rate=500           초당 이벤트 수
               --duration=60s       실행 시간 (예: 30s, 5m)
               --fingerprints=1000  지문 종류 수 (sustained 만)
@@ -43,6 +48,9 @@ public record Options(
         }
         if (fingerprints < 1 || batch < 1 || maxInFlight < 1) {
             throw new IllegalArgumentException("--fingerprints, --batch, --max-in-flight 는 1 이상이어야 한다");
+        }
+        if (scenario == Scenario.HTTP ? url == null : dsn == null) {
+            throw new IllegalArgumentException(scenario == Scenario.HTTP ? "--url 이 없다" : "--dsn 이 없다");
         }
         if (scenario == Scenario.BURST) {
             fingerprints = 1;
@@ -64,12 +72,11 @@ public record Options(
             values.put(arg.substring(2, eq), arg.substring(eq + 1));
         }
         String dsn = values.remove("dsn");
-        if (dsn == null) {
-            throw new IllegalArgumentException("--dsn 이 없다");
-        }
+        String url = values.remove("url");
         Options options = new Options(
                 scenario,
-                Dsn.parse(dsn),
+                dsn == null ? null : Dsn.parse(dsn),
+                url == null ? null : URI.create(url),
                 Integer.parseInt(values.getOrDefault("rate", "500")),
                 parseDuration(values.getOrDefault("duration", "60s")),
                 Integer.parseInt(values.getOrDefault("fingerprints", "1000")),
@@ -98,8 +105,8 @@ public record Options(
         };
     }
 
-    /** 초당 보낼 봉투 수. 이벤트 수를 묶음 크기로 나눈 것이다. */
+    /** 초당 보낼 요청 수. 봉투는 이벤트 수를 묶음 크기로 나눈 것이다. */
     double envelopesPerSecond() {
-        return (double) rate / batch;
+        return scenario == Scenario.HTTP ? rate : (double) rate / batch;
     }
 }
