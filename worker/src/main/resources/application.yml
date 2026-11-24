@@ -49,6 +49,7 @@ errdeck:
     handoff-capacity: 2000
     compute-threads: 2
     events-per-transaction: 3
+    # 봉투 수가 아니라 이벤트 수다. 봉투 하나에 50건까지 든다.
     write-queue-capacity: 10000
     batch-max-rows: 5000
     batch-max-wait: 1s

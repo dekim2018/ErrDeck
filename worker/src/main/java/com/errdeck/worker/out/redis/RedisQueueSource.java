@@ -91,18 +91,20 @@ public class RedisQueueSource implements QueueSource {
     }
 
     @Override
-    public List<QueueEntry> claim(QueueStream stream, Duration minIdle, int count) {
+    public Claimed claim(QueueStream stream, Duration minIdle, int count, String start) {
         List<Object> flat = readConnection(stream).scriptingCommands().eval(claimScript, ReturnType.MULTI, 1,
-                bytes(stream.key()), bytes(group), bytes(consumer), bytes(Long.toString(minIdle.toMillis())), bytes(Integer.toString(count)));
+                bytes(stream.key()), bytes(group), bytes(consumer), bytes(Long.toString(minIdle.toMillis())),
+                bytes(Integer.toString(count)), bytes(start));
         List<QueueEntry> entries = new ArrayList<>();
-        if (flat == null) {
-            return entries;
+        if (flat == null || flat.isEmpty()) {
+            return new Claimed(entries, CLAIM_START);
         }
-        for (int i = 0; i + 3 < flat.size(); i += 4) {
+        String next = new String((byte[]) flat.getFirst(), StandardCharsets.UTF_8);
+        for (int i = 1; i + 3 < flat.size(); i += 4) {
             entries.add(entry(stream, new String((byte[]) flat.get(i), StandardCharsets.UTF_8),
                     (byte[]) flat.get(i + 1), (byte[]) flat.get(i + 2), (byte[]) flat.get(i + 3)));
         }
-        return entries;
+        return new Claimed(entries, next);
     }
 
     @Override

@@ -130,7 +130,11 @@ final class Runner {
     /** 시나리오에 맞는 요청을 만든다. 봉투는 보내기 직전에 만들어 매번 다른 event_id 를 쓴다. */
     static Supplier<HttpRequest> requests(Options options) {
         if (options.scenario() == Scenario.HTTP) {
-            HttpRequest get = HttpRequest.newBuilder(options.url()).timeout(options.timeout()).GET().build();
+            HttpRequest.Builder builder = HttpRequest.newBuilder(options.url()).timeout(options.timeout()).GET();
+            if (options.bearer() != null) {
+                builder.header("Authorization", "Bearer " + options.bearer());
+            }
+            HttpRequest get = builder.build();
             return () -> get;
         }
         EventFactory factory = new EventFactory(options, Clock.systemUTC());
