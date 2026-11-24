@@ -113,3 +113,11 @@ JVM과 스레드 대시보드는 서비스 이름을 변수로 받는다. 이 �
 ## 13.7 로그
 
 로그 수집 도구(Loki 등)는 넣지 않는다. 메모리 예산을 관측 도구에 더 쓰기보다 수집 파이프라인에 쓴다. 컨테이너 로그는 파일 크기와 개수를 제한해 회전시키고, 로그 한 줄마다 trace_id를 넣어 추적 화면에서 찾은 요청을 로그에서 바로 검색할 수 있게 한다.
+
+16 작업에서 이 장을 compose 의 `obs` 프로필로 만들었다. 설정은 `deploy/` 아래에 있고 결정은 CHOICES 16 절이다. 바뀐 점은 다음과 같다.
+
+- 13.4 의 12개 중 업타임 지연과 알림 발송 지표는 그 기능을 만드는 20, 21 작업에서 붙인다. 대신 worker 단계에 `restore` 를 나눴고, api 에 받은 경보를 세는 `errdeck_alerts_received_total` 을 더했다.
+- 가상 스레드 붙잡힘 지표는 기본 JVM 지표에 없어 `micrometer-java21` 을 더했다.
+- Go 로 만든 관측 도구도 CPU 상한에 걸렸다(14.2). 쉬는 중의 Grafana 가 CPU 제한 경보를 울려 `GOMAXPROCS=1` 을 준다.
+- 확인: `docker compose --profile core --profile obs up -d --build` 로 13개 컨테이너가 뜨고 수집 대상 10개가 모두 up 이었다. worker 를 멈추자 1분 뒤 ProcessDown 이 울리고 Alertmanager 를 거쳐 api 에 도착했다(`경보 firing: ProcessDown {job=worker}`). 대시보드 5개의 질의 중 데이터가 비는 것은 없었다.
+
