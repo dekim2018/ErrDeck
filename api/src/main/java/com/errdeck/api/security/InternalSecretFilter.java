@@ -16,6 +16,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
 public class InternalSecretFilter extends OncePerRequestFilter {
 
     public static final String HEADER = "X-ErrDeck-Internal-Secret";
+    private static final String BEARER = "Bearer ";
 
     private final byte[] secret;
 
@@ -27,6 +28,11 @@ public class InternalSecretFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
             throws ServletException, IOException {
         String given = request.getHeader(HEADER);
+        // Alertmanager 의 웹훅 설정은 임의 헤더보다 Authorization 헤더가 쉽다. 둘 다 받는다.
+        String authorization = request.getHeader("Authorization");
+        if (given == null && authorization != null && authorization.startsWith(BEARER)) {
+            given = authorization.substring(BEARER.length());
+        }
         if (given == null || !MessageDigest.isEqual(secret, given.getBytes(StandardCharsets.UTF_8))) {
             response.sendError(HttpServletResponse.SC_UNAUTHORIZED);
             return;

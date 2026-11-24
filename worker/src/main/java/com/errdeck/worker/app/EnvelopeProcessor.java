@@ -50,6 +50,7 @@ public class EnvelopeProcessor {
         Envelope envelope = codec.decode(entry.body());
         metrics.stage(Stage.DECOMPRESS, System.nanoTime() - start);
 
+        long restoreNanos = 0;
         start = System.nanoTime();
         List<EventRow> rows = new ArrayList<>();
         List<Quarantine> quarantined = new ArrayList<>();
@@ -60,14 +61,18 @@ public class EnvelopeProcessor {
             }
             try {
                 // 브라우저 스택은 지문을 만들기 전에 소스맵으로 되돌린다. 번들 이름은 빌드마다 바뀌어 지문에 쓸 수 없다(7.1).
-                StackRestorer.Result restored = restorer.restore(entry.projectId(), Event.fromJson(item.payload()));
+                Event event = Event.fromJson(item.payload());
+                long restoreStart = System.nanoTime();
+                StackRestorer.Result restored = restorer.restore(entry.projectId(), event);
+                restoreNanos += System.nanoTime() - restoreStart;
                 rows.add(toRow(entry, restored.event(), restored.restored()));
             } catch (IllegalArgumentException e) {
                 // 이벤트 하나가 틀렸다고 봉투의 나머지까지 버리지 않는다. 다시 해도 같으므로 바로 격리한다.
                 quarantined.add(new Quarantine(entry.projectId(), item.payload(), "이벤트 형식: " + e.getMessage()));
             }
         }
-        metrics.stage(Stage.FINGERPRINT, System.nanoTime() - start);
+        metrics.stage(Stage.RESTORE, restoreNanos);
+        metrics.stage(Stage.FINGERPRINT, System.nanoTime() - start - restoreNanos);
         return new ProcessedEntry(entry.ref(), entry.receivedAt(), rows, quarantined);
     }
 

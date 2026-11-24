@@ -48,6 +48,18 @@ class FilterChainTest extends TestInfra {
                 .isEqualTo(401);
         assertThat(api.send("POST", "/api/internal/alerts", alert, null, null, Map.of("X-ErrDeck-Internal-Secret", "test-secret"))
                 .status()).isEqualTo(202);
+        assertThat(api.post("/api/internal/alerts", alert, "test-secret").status()).isEqualTo(202);
+    }
+
+    @Test
+    void 받은_경보는_이름과_상태별로_센다() {
+        Map<String, Object> alert = Map.of("status", "firing", "alerts", java.util.List.of(
+                Map.of("status", "firing", "labels", Map.of("alertname", "ProcessDown", "job", "worker"))));
+
+        assertThat(api.post("/api/internal/alerts", alert, "test-secret").status()).isEqualTo(202);
+
+        assertThat(api.get("/actuator/prometheus", null).body())
+                .contains("errdeck_alerts_received_total{alertname=\"ProcessDown\",status=\"firing\"}");
     }
 
     @Test

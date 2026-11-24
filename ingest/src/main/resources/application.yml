@@ -28,12 +28,22 @@ spring:
 
 server:
   port: ${ERRDECK_INGEST_PORT:8080}
+  tomcat:
+    # 동시 연결 상한(14.3). 가상 스레드에는 스레드 풀이라는 천장이 없으므로 연결 수로 힙에 쌓이는 요청을 묶는다(14.7).
+    max-connections: 2000
+    # 상한에 닿은 뒤 커널이 받아 둘 연결 수. 넘으면 연결을 거절하고 SDK 는 버린 건수를 센다.
+    accept-count: 100
 
 management:
   endpoints:
     web:
       exposure:
         include: health,prometheus
+  metrics:
+    distribution:
+      # 12.2 의 p95 를 구하려면 요청 시간을 히스토그램으로 내보내야 한다(13.2).
+      percentiles-histogram:
+        http.server.requests: true
 
 # 값은 5.3, 5.4, 5.5, 14.4 를 따른다. 18장의 실험 결과로 다시 맞춘다.
 errdeck:
