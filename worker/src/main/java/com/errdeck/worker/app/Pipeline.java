@@ -2,8 +2,8 @@ package com.errdeck.worker.app;
 
 import com.errdeck.worker.config.WorkerProperties;
 import com.errdeck.worker.domain.EntryRef;
-import com.errdeck.worker.domain.EventRow;
 import com.errdeck.worker.domain.ProcessedEntry;
+import com.errdeck.worker.domain.Quarantine;
 import com.errdeck.worker.domain.QueueEntry;
 import com.errdeck.worker.domain.QueueStream;
 import java.time.Clock;
@@ -43,7 +43,7 @@ public class Pipeline {
     private static final Duration SHUTDOWN_MARGIN = Duration.ofSeconds(3);
 
     private final QueueSource source;
-    private final EventSink sink;
+    private final BatchWriter writer;
     private final EnvelopeProcessor processor;
     private final WorkerMetrics metrics;
     private final WorkerProperties properties;
@@ -56,7 +56,7 @@ public class Pipeline {
 
     private final List<Thread> readers = new ArrayList<>();
     private final List<Thread> computers = new ArrayList<>();
-    private Thread writer;
+    private Thread writerThread;
     private CountDownLatch readersDone;
     private CountDownLatch computersDone;
 
@@ -64,10 +64,10 @@ public class Pipeline {
     private volatile boolean computing;
     private volatile Instant giveUpAt = Instant.MAX;
 
-    public Pipeline(QueueSource source, EventSink sink, EnvelopeProcessor processor, WorkerMetrics metrics,
+    public Pipeline(QueueSource source, BatchWriter writer, EnvelopeProcessor processor, WorkerMetrics metrics,
                     WorkerProperties properties, Clock clock) {
         this.source = source;
-        this.sink = sink;
+        this.writer = writer;
         this.processor = processor;
         this.metrics = metrics;
         this.properties = properties;
@@ -90,7 +90,7 @@ public class Pipeline {
         for (int i = 0; i < properties.computeThreads(); i++) {
             computers.add(Thread.ofPlatform().name("errdeck-compute-" + i).start(this::computeLoop));
         }
-        writer = Thread.ofPlatform().name("errdeck-writer").start(this::writeLoop);
+        writerThread = Thread.ofPlatform().name("errdeck-writer").start(this::writeLoop);
     }
 
     /**
@@ -103,7 +103,7 @@ public class Pipeline {
         awaitQuietly(readersDone);
         computing = false;
         awaitQuietly(computersDone);
-        join(writer);
+        join(writerThread);
         for (Thread thread : allThreads()) {
             if (thread.isAlive()) {
                 thread.interrupt();
@@ -167,15 +167,7 @@ public class Pipeline {
                     }
                     continue;
                 }
-                ProcessedEntry processed;
-                try {
-                    processed = processor.process(entry);
-                } catch (RuntimeException e) {
-                    // 처리 실패의 재시도와 격리는 08 작업에서 한다. 여기서는 확인 처리하지 않고 대기열에 남겨 이어받기에 맡긴다.
-                    log.warn("항목 {} 을 처리하지 못했다: {}", entry.id(), e.toString());
-                    inFlight.remove(entry.ref());
-                    continue;
-                }
+                ProcessedEntry processed = processWithRetry(entry);
                 // 쓰기 큐가 차면 여기서 멈춘다. 계산이 멈추면 넘겨주기 큐가 차고 읽기가 멈춘다.
                 while (!writeQueue.offer(processed, POLL_MILLIS, TimeUnit.MILLISECONDS)) {
                     if (pastGiveUp()) {
@@ -189,6 +181,24 @@ public class Pipeline {
         } finally {
             computersDone.countDown();
         }
+    }
+
+    /**
+     * 처리에 실패하면 다시 시도하고, 정해진 횟수만큼 실패하면 원문을 격리할 항목으로 바꾼다(6.7).
+     * 해석할 수 없는 항목 하나가 대기열 전체를 막지 않게 한다.
+     */
+    private ProcessedEntry processWithRetry(QueueEntry entry) {
+        RuntimeException last = null;
+        for (int attempt = 1; attempt <= properties.maxProcessAttempts(); attempt++) {
+            try {
+                return processor.process(entry);
+            } catch (RuntimeException e) {
+                last = e;
+            }
+        }
+        log.warn("항목 {} 을 {}번 처리하지 못해 격리한다: {}", entry.id(), properties.maxProcessAttempts(), last.toString());
+        return new ProcessedEntry(entry.ref(), entry.receivedAt(), List.of(),
+                List.of(new Quarantine(entry.projectId(), entry.body(), "처리 실패: " + last.getMessage())));
     }
 
     private void writeLoop() {
@@ -226,30 +236,27 @@ public class Pipeline {
     }
 
     /**
-     * 묶음을 쓰고 확인 처리한다. 쓰기에 실패하면 간격을 늘려 가며 같은 묶음을 다시 쓴다. 그동안 쓰기 큐를 비우지 않으므로
+     * 묶음을 쓰고 확인 처리한다. 쓰기에 실패하면 간격을 늘려 가며 같은 쓰기를 이어서 한다. 그동안 쓰기 큐를 비우지 않으므로
      * 막힘이 앞 단계로 전해진다. 종료 제한 시간을 넘기면 확인 처리하지 않고 포기한다.
      *
      * @return 계속할 수 있으면 true
      */
     private boolean flush(List<ProcessedEntry> batch) throws InterruptedException {
-        List<EventRow> rows = new ArrayList<>();
-        batch.forEach(entry -> rows.addAll(entry.rows()));
+        BatchWriter.BatchWrite write = writer.prepare(batch);
         Duration backoff = Duration.ofMillis(500);
-        while (!rows.isEmpty()) {
+        while (true) {
             long start = System.nanoTime();
             try {
-                sink.write(rows);
-                long elapsed = System.nanoTime() - start;
-                metrics.flushed(rows.size(), elapsed);
-                metrics.stage(WorkerMetrics.Stage.WRITE, elapsed);
+                write.run();
+                metrics.stage(WorkerMetrics.Stage.WRITE, System.nanoTime() - start);
                 break;
             } catch (RuntimeException e) {
                 if (pastGiveUp()) {
-                    log.warn("종료 제한 시간이 지나 묶음 {}행을 쓰지 못하고 포기한다. 확인 처리하지 않았으므로 대기열에 남는다", rows.size());
+                    log.warn("종료 제한 시간이 지나 묶음 {}건을 쓰지 못하고 포기한다. 확인 처리하지 않았으므로 대기열에 남는다", batch.size());
                     batch.forEach(entry -> inFlight.remove(entry.ref()));
                     return false;
                 }
-                log.warn("묶음 {}행을 쓰지 못했다. {} 뒤 다시 쓴다: {}", rows.size(), backoff, e.toString());
+                log.warn("묶음 {}건을 쓰지 못했다. {} 뒤 이어서 쓴다: {}", batch.size(), backoff, e.toString());
                 sleep(backoff);
                 backoff = min(backoff.multipliedBy(2), properties.retryMaxBackoff());
             }
@@ -284,8 +291,8 @@ public class Pipeline {
     private List<Thread> allThreads() {
         List<Thread> all = new ArrayList<>(readers);
         all.addAll(computers);
-        if (writer != null) {
-            all.add(writer);
+        if (writerThread != null) {
+            all.add(writerThread);
         }
         return all;
     }
