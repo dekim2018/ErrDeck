@@ -1,0 +1,30 @@
+spring:
+  application:
+    name: errdeck-demo-api
+  threads:
+    virtual:
+      enabled: true
+
+server:
+  port: ${DEMO_PORT:8090}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+
+# 데모 프로젝트의 DSN. scripts/demo/seed.sql 이 만드는 프로젝트(9001)와 키다.
+# DEMO_ERRDECK_ENABLED=false 로 SDK 를 끄면 SDK 부담 실험의 비교 기준이 된다.
+errdeck:
+  dsn: ${DEMO_ERRDECK_DSN:http://demoapikey@localhost:8080/9001}
+  enabled: ${DEMO_ERRDECK_ENABLED:true}
+  environment: ${DEMO_ENVIRONMENT:local}
+  release: ${DEMO_RELEASE:demo-api@0.1.0}
+  in-app-packages: com.errdeck.demo
+
+demo:
+  scheduled-failure:
+    # 정산 배치가 이 간격마다 실패한다. SDK 부담 실험에서는 꺼서 측정에 섞이지 않게 한다.
+    enabled: ${DEMO_SCHEDULED_FAILURE_ENABLED:true}
+    interval: ${DEMO_SCHEDULED_FAILURE_INTERVAL:60s}
