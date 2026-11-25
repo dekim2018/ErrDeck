@@ -73,7 +73,9 @@ export function createErrDeck(options: Options) {
 
 /** 라우트 이동과 클릭한 요소(11.3). */
 function watchBreadcrumbs(client: Client, options: Options) {
-  options.router?.afterEach((to, from) => client.addBreadcrumb({ category: 'navigation', data: { from: from.fullPath, to: to.fullPath } }))
+  // 쿼리에는 토큰이 실릴 수 있어 경로만 남긴다(15.6).
+  const path = (p: string) => p.split('?')[0] ?? p
+  options.router?.afterEach((to, from) => client.addBreadcrumb({ category: 'navigation', data: { from: path(from.fullPath), to: path(to.fullPath) } }))
   document.addEventListener(
     'click',
     (event) => {

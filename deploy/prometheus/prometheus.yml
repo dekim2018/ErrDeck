@@ -29,6 +29,12 @@ scrape_configs:
     metrics_path: /actuator/prometheus
     static_configs:
       - targets: ["demo-api:8090", "demo-api-downstream:8090"]
+  # 같은 맥에서 띄운 CoPage 앱(로컬 연결, docs/INTEGRATION.md). 관리 포트를 0.0.0.0 으로 열어야 닿는다.
+  # 띄우지 않았으면 up=0 으로 남을 뿐이다.
+  - job_name: copage-app
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["host.docker.internal:8081"]
   - job_name: postgres
     static_configs:
       - targets: ["postgres-exporter:9187"]

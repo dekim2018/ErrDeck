@@ -90,3 +90,29 @@ describe('Client 와 추적', () => {
     expect(traceId).toMatch(/^[0-9a-f]{32}$/)
   })
 })
+
+describe('가리기', () => {
+  it('주소, 빵부스러기, 트랜잭션 이름, 스팬 설명에서 감시 대상이 정한 비밀을 가린다', async () => {
+    const bodies: Uint8Array[] = []
+    const transport: Transport = {
+      send: async (_url, body) => {
+        bodies.push(body)
+        return { status: 202 }
+      },
+      beacon: () => true,
+    }
+    const redact = (t: string) => t.replace(/(\/s\/)[^/?#]+/g, '$1REDACTED')
+    const client = new Client('https://i/ingest/1/envelope?key=k', { tracesSampleRate: 1, redact }, transport)
+    client.addBreadcrumb({ category: 'http', message: 'GET /s/secret-token', data: { url: '/s/secret-token' } })
+    client.tracer?.start('/s/secret-token', 'pageload')
+    client.tracer?.startSpan('http.client', 'GET /s/secret-token/meta', '/s/secret-token/meta').finish(200)
+    client.capture(new Error('공유 링크 /s/secret-token 에서 터졌다'))
+    client.tracer?.end()
+    await client.flush()
+
+    const { gunzipSync } = await import('node:zlib')
+    const text = bodies.map((b) => new TextDecoder().decode(b[0] === 0x1f ? gunzipSync(b) : b)).join('\n')
+    expect(text).not.toContain('secret-token')
+    expect(text).toContain('/s/REDACTED')
+  })
+})

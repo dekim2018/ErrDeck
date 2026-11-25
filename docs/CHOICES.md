@@ -722,3 +722,25 @@ WORKFLOW 4장은 시안을 2개 이상 만들어 사용자가 고르게 했지�
 ### 26-1. 로컬 쿠버네티스는 하지 않는다
 
 - **이유**: 선택 과제이고 마감이 있다. 17.2 의 확인할 것(worker 여러 대, 프로세스 복구, 자원 상한, 준비 상태)은 compose 로 이미 확인했다(`--scale worker=2`, 장애 실험의 `docker kill`, 상한, healthcheck). 하게 되면 14장의 상한을 그대로 requests 와 limits 로 옮기고, 대기열 나이(`errdeck_queue_oldest_age_seconds`)로 worker 를 늘린다.
+
+## 27 CoPage 로컬 연결
+
+### 27-1. 빈 DSN 이면 SDK 를 끈다
+
+- **고른 것**: 자동 설정의 조건을 `errdeck.dsn` 이 있는지에서 비어 있지 않은지로 바꿨다(`@ConditionalOnExpression`). `${ERRDECK_DSN:}` 처럼 빈 기본값을 쓰면 전에는 켜졌다가 DSN 해석에서 시작이 실패했다.
+
+### 27-2. 경로와 메시지의 비밀은 감시 대상이 정규식(스프링)이나 함수(Vue)로 준다
+
+- **고른 것**: 스프링 `errdeck.redact-paths`(첫 괄호까지 남기고 나머지를 `[Filtered]`), Vue `redact(text)`. 스프링은 요청 주소, 나가는 호출의 경로, 예외 메시지에, Vue 는 주소, 빵부스러기, 트랜잭션 이름, 스팬 설명, 예외 메시지에 쓴다. 쿼리 이름의 기본 목록에 `ticket` 을 더했다. Vue 의 라우트 이동 빵부스러기는 쿼리를 뺀다.
+- **이유**: CoPage 는 공유와 초대 토큰을 경로에 싣는다. 쿼리의 이름만 보는 기본 가리기로는 막지 못한다. 감시 대상이 이미 가진 규칙(CoPage 의 `scrub`)을 그대로 넘길 수 있게 함수로 받는다.
+
+### 27-3. ClickHouse 의 시스템 로그를 끈다
+
+- **고른 것**: query_log 와 part_log 만 남기고 trace_log, text_log, metric_log 등 15종을 끈다.
+- **이유**: 실험 몇 번 뒤 시스템 로그가 수백만 행이 되고, 그 병합과 할당기가 쥔 메모리로 상주 메모리가 서버 상한(1.5GB)을 넘었다. 그동안 모든 조회와 쓰기가 `MEMORY_LIMIT_EXCEEDED` 로 거절되었다(worker 는 다시 시도해 결국 썼다). 로그를 끄고 예전 테이블을 지운 뒤 재시작하자 상주 메모리가 1.93GB 에서 1.18GB 로 내려갔다.
+- **감수하는 것**: ClickHouse 자체의 문제를 볼 때 trace_log 와 text_log 가 없다. 필요하면 잠시 켠다. 이미 떠 있는 환경은 예전 테이블을 직접 지워야 메모리가 준다(`DROP TABLE system.text_log` 등).
+
+### 27-4. 같은 맥의 감시 대상은 host.docker.internal 로 긁고 점검한다
+
+- **고른 것**: 프로메테우스에 `copage-app` 수집 대상(`host.docker.internal:8081`), 프로메테우스와 worker 에 `host-gateway` 를 붙이고, 업타임 허용 호스트에 `host.docker.internal` 을 더했다.
+- **감수하는 것**: CoPage 를 띄우지 않으면 `copage-app` 이 up=0 으로 남고 통합 화면에서 장애로 보인다. 쓰지 않을 때는 프로젝트를 지우거나 이 수집 대상을 지운다.

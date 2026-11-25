@@ -67,7 +67,7 @@ export class Tracer {
   private done: ErrDeckTransaction[] = []
 
   constructor(
-    private readonly options: TracingOptions & { environment?: string; release?: string },
+    private readonly options: TracingOptions & { environment?: string; release?: string; redact?: (text: string) => string },
     private readonly now: () => number = () => Date.now(),
   ) {}
 
@@ -78,12 +78,12 @@ export class Tracer {
   start(name: string, op: string): void {
     this.end()
     const rate = this.options.tracesSampleRate ?? 0.1
-    this.active = { traceId: hex(32), spanId: hex(16), sampled: Math.random() < rate, name, op, start: this.now(), spans: [], pending: 0, error: false }
+    this.active = { traceId: hex(32), spanId: hex(16), sampled: Math.random() < rate, name: this.clean(name), op, start: this.now(), spans: [], pending: 0, error: false }
     this.schedule()
   }
 
   rename(name: string): void {
-    if (this.active && name) this.active.name = name
+    if (this.active && name) this.active.name = this.clean(name)
   }
 
   markError(): void {
@@ -103,7 +103,7 @@ export class Tracer {
       finish: (status) => {
         tx.pending--
         if (status === undefined || status >= 500) tx.error = true
-        this.add(tx, { span_id: spanId, parent_span_id: tx.spanId, op, description, start_offset_ms: begin - tx.start, duration_ms: this.now() - begin })
+        this.add(tx, { span_id: spanId, parent_span_id: tx.spanId, op, description: this.clean(description), start_offset_ms: begin - tx.start, duration_ms: this.now() - begin })
         if (tx === this.active) this.schedule()
       },
     }
@@ -158,6 +158,14 @@ export class Tracer {
     clearTimeout(tx.timer)
     const left = MAX_MS - (this.now() - tx.start)
     tx.timer = setTimeout(() => (tx.pending > 0 && left > IDLE_MS ? this.schedule() : this.end()), Math.max(0, Math.min(IDLE_MS, left)))
+  }
+
+  private clean(text: string): string {
+    try {
+      return this.options.redact ? this.options.redact(text) : text
+    } catch {
+      return '[Filtered]'
+    }
   }
 
   private propagates(url: string): boolean {

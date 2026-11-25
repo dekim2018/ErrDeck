@@ -29,7 +29,7 @@ import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBooleanProperty;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
@@ -44,7 +44,8 @@ import org.springframework.util.ErrorHandler;
  * 의존성을 추가하고 {@code errdeck.dsn} 을 설정하면 켜진다(11.2). 감시 대상에 있는 것(서블릿, WebFlux, Logback)에만 붙는다.
  */
 @AutoConfiguration
-@ConditionalOnProperty(prefix = "errdeck", name = "dsn")
+// DSN 이 없거나 빈 문자열이면 꺼진다. ${ERRDECK_DSN:} 처럼 비어 있는 기본값을 쓸 수 있게 한다.
+@ConditionalOnExpression("!'${errdeck.dsn:}'.isBlank()")
 @ConditionalOnBooleanProperty(name = "errdeck.enabled", matchIfMissing = true)
 @EnableConfigurationProperties(ErrDeckProperties.class)
 public class ErrDeckAutoConfiguration {
@@ -52,6 +53,7 @@ public class ErrDeckAutoConfiguration {
     @Bean(destroyMethod = "close")
     @ConditionalOnMissingBean
     public ErrDeckClient errDeckClient(ErrDeckProperties properties) {
+        com.errdeck.sdk.Redaction.configure(properties.redactPaths());
         ErrDeckOptions defaults = ErrDeckOptions.defaults(Dsn.parse(properties.dsn()));
         ErrDeckOptions options = new ErrDeckOptions(
                 defaults.dsn(),

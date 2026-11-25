@@ -35,6 +35,16 @@ export class Client {
     this.tracer = options.tracing === false ? null : new Tracer(options, now)
   }
 
+  /** 감시 대상이 준 가리기. 실패하면 원문 대신 가린 표시를 보낸다. */
+  readonly redact = (text: string): string => {
+    if (!this.options.redact) return text
+    try {
+      return this.options.redact(text)
+    } catch {
+      return '[Filtered]'
+    }
+  }
+
   capture(error: unknown, tags?: Record<string, string>): void {
     try {
       if (error && typeof error === 'object') {
@@ -51,7 +61,9 @@ export class Client {
   }
 
   addBreadcrumb(crumb: Omit<Breadcrumb, 'timestamp'>): void {
-    this.crumbs.push({ timestamp: new Date(this.now()).toISOString(), ...crumb })
+    const r = this.redact
+    const data = crumb.data ? Object.fromEntries(Object.entries(crumb.data).map(([k, v]) => [k, r(v)])) : undefined
+    this.crumbs.push({ timestamp: new Date(this.now()).toISOString(), ...crumb, ...(crumb.message ? { message: r(crumb.message) } : {}), ...(data ? { data } : {}) })
     if (this.crumbs.length > this.maxBreadcrumbs) this.crumbs.shift()
   }
 
@@ -173,7 +185,7 @@ export class Client {
       exceptions: [
         {
           type: err?.name || (typeof error === 'object' && error !== null ? 'Error' : 'UnhandledValue'),
-          value: truncate(err ? err.message : describe(error)),
+          value: this.redact(truncate(err ? err.message : describe(error))),
           frames: parseStack(err?.stack),
         },
       ],
@@ -188,7 +200,7 @@ export class Client {
       // 쿼리와 조각은 보내지 않는다. 토큰이 실려 있을 수 있다(15.6).
       event.request = {
         method: 'GET',
-        url: location.origin + location.pathname,
+        url: this.redact(location.origin + location.pathname),
         headers: typeof navigator !== 'undefined' ? { 'User-Agent': navigator.userAgent } : {},
       }
     }
