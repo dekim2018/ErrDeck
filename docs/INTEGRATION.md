@@ -2,6 +2,19 @@
 
 팬파라이브(스프링 서비스 5개와 Vue)와 CoPage(스프링 앱과 Vue)에 ErrDeck 을 붙이는 방법이다(23 작업). 두 저장소를 직접 고치는 일은 이 저장소 밖이므로 여기에는 방법만 적는다. 실제로 고칠 때는 아래 순서를 그대로 따른다.
 
+## 0. 로컬에서만 연결하기(CoPage, 27 작업에서 확인)
+
+서버에 올리지 않아도 같은 맥에서 CoPage 와 ErrDeck 을 함께 띄워 연결할 수 있다. 에러, 추적, 요약 카드, 업타임, 알림이 모두 된다.
+
+| 무엇 | 어떻게 |
+| --- | --- |
+| SDK | `./gradlew :core:publishToMavenLocal :sdk-spring:publishToMavenLocal`. CoPage 는 `-Perrdeck=true` 로 빌드할 때만 `mavenLocal()` 에서 넣는다. 화면은 빌드한 파일을 CoPage 에 함께 둔다(`npm run errdeck:sync`) |
+| 프로젝트와 DSN | `scripts/seed/systems.sql` 다음에 `scripts/seed/copage-local.sql`. 화면의 출처(5173, 5174)를 허용하고 앱의 상태 모니터를 만들고 DSN 두 개를 출력한다. ingest 는 `localhost:18080` |
+| 지표 | ErrDeck 의 프로메테우스가 `host.docker.internal:8081`(CoPage 관리 포트)을 `copage-app` 으로 긁는다. CoPage 를 `COPAGE_MANAGEMENT_ADDRESS=0.0.0.0` 으로 띄워야 도커 안에서 닿는다 |
+| 가리기 | 서버 `errdeck.redact-paths`(정규식, 첫 괄호까지 남김), 화면 `redact` 함수. CoPage 는 Sentry 와 같은 규칙을 준다 |
+
+자세한 순서는 CoPage 저장소의 README "ErrDeck 으로 모니터링(로컬)" 에 있다.
+
 ## 1. 시스템과 프로젝트 등록
 
 ```bash
@@ -47,7 +60,9 @@ dependencies {
 
 ```yaml
 errdeck:
-  dsn: ${ERRDECK_DSN:}            # 비어 있으면 SDK 가 꺼진다
+  dsn: ${ERRDECK_DSN:}            # 없거나 비어 있으면 SDK 가 꺼진다
+  redact-paths:                   # 경로와 예외 메시지에서 가릴 것. 첫 괄호까지 남기고 가린다
+    - (/s/)[^/?#]+
   environment: production
   release: ${GIT_COMMIT:unknown}  # 재발 판정과 릴리스 화면(6.6)이 이 값을 쓴다
   in-app-packages: com.livebroadcast
