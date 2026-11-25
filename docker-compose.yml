@@ -36,7 +36,7 @@ x-app-env: &app-env
   # 지표는 서비스 포트와 나눈 관리 포트로만 낸다. 관리 포트는 호스트에 열지 않는다(13.2).
   MANAGEMENT_SERVER_PORT: 8091
   # 같은 도커 네트워크의 데모 앱은 내부 주소지만 모니터로 점검한다(9.4).
-  ERRDECK_UPTIME_ALLOWED_HOSTS: demo-api,demo-api-downstream
+  ERRDECK_UPTIME_ALLOWED_HOSTS: demo-api,demo-api-downstream,host.docker.internal
   # 알림 메시지의 링크(16.3)
   ERRDECK_CONSOLE_URL: ${ERRDECK_CONSOLE_URL:-http://localhost:5173}
   # glibc 가 스레드마다 메모리 구역을 만들어 힙 밖 사용이 커지는 것을 줄인다(14.7).
@@ -135,7 +135,7 @@ services:
         -XX:ActiveProcessorCount=1 -Xms256m -Xmx256m -XX:+UseG1GC -XX:+ExitOnOutOfMemoryError
       ERRDECK_INTERNAL_SECRET: ${ERRDECK_INTERNAL_SECRET:-local-internal-secret}
       ERRDECK_PUBLIC_INGEST_URL: http://localhost:${ERRDECK_INGEST_HOST_PORT:-18080}
-      ERRDECK_CONSOLE_ORIGINS: http://localhost:5173
+      ERRDECK_CONSOLE_ORIGINS: ${ERRDECK_CONSOLE_ORIGINS:-http://localhost:5173}
       ERRDECK_GRAFANA_URL: http://localhost:${ERRDECK_GRAFANA_PORT:-13000}
       ERRDECK_PROMETHEUS_URL: http://prometheus:9090
     ports:
@@ -175,6 +175,9 @@ services:
 
   worker:
     profiles: [core]
+    # 업타임 점검이 같은 맥의 감시 대상(CoPage)에 닿게 한다.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     build:
       context: .
       dockerfile: worker/Dockerfile
@@ -213,6 +216,9 @@ services:
       - --web.enable-lifecycle
     ports:
       - "${ERRDECK_PROMETHEUS_PORT:-19090}:9090"
+    # 같은 맥에서 띄운 감시 대상(CoPage)을 긁는다. 리눅스에서도 host.docker.internal 이 서버를 가리키게 한다.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - ./deploy/prometheus:/etc/prometheus:ro
       - prometheus-data:/prometheus

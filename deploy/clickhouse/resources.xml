@@ -8,4 +8,22 @@
     <uncompressed_cache_size>0</uncompressed_cache_size>
     <!-- 병합 스레드(background_pool_size)는 기본값 16 을 둔다. 줄이려면 merge_tree 의 변경 실행 기준값들도 함께
          줄여야 해서, CPU 상한 2.0 이 실제로 부족한지 17 작업의 CPU 제한 지표로 본 뒤 정한다. -->
+    <!-- 이 서비스가 읽지 않는 시스템 로그를 끈다. 켜 두면 실험 몇 번에 수백만 행이 쌓이고, 할당기가 그 메모리를 쥐고 있어
+         상주 메모리가 서버 상한(1.5GB)을 넘겨 모든 조회와 쓰기가 거절되었다(CoPage 연결 중 발견, CHOICES 27-3).
+         query_log 와 part_log 는 조회와 병합을 볼 때 쓰므로 남긴다. -->
+    <trace_log remove="1"/>
+    <text_log remove="1"/>
+    <metric_log remove="1"/>
+    <asynchronous_metric_log remove="1"/>
+    <query_thread_log remove="1"/>
+    <query_views_log remove="1"/>
+    <processors_profile_log remove="1"/>
+    <opentelemetry_span_log remove="1"/>
+    <latency_log remove="1"/>
+    <query_metric_log remove="1"/>
+    <error_log remove="1"/>
+    <session_log remove="1"/>
+    <blob_storage_log remove="1"/>
+    <asynchronous_insert_log remove="1"/>
+    <background_schedule_pool_log remove="1"/>
 </clickhouse>
