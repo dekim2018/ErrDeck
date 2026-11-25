@@ -42,10 +42,29 @@ public class ErrDeckTracingWebFilter implements WebFilter, Ordered {
                 });
     }
 
+    /** Spring Cloud Gateway 가 고른 라우트. 클래스에 기대지 않으려고 속성 이름과 getId 로 읽는다. */
+    private static final String GATEWAY_ROUTE = "org.springframework.cloud.gateway.support.ServerWebExchangeUtils.gatewayRoute";
+
+    /**
+     * 경로 패턴이 이름이다. Spring Cloud Gateway 는 패턴 대신 라우트를 고르므로 그때는 라우트 ID 를 쓴다(팬파라이브 gateway).
+     * 실제 주소는 쓰지 않는다(8.3).
+     */
     private static String name(ServerWebExchange exchange) {
         Object pattern = exchange.getAttribute(HandlerMapping.BEST_MATCHING_PATTERN_ATTRIBUTE);
-        String path = pattern != null ? pattern.toString() : "(패턴 없음)";
+        String path = pattern != null ? pattern.toString() : route(exchange);
         return exchange.getRequest().getMethod() + " " + path;
+    }
+
+    private static String route(ServerWebExchange exchange) {
+        Object route = exchange.getAttribute(GATEWAY_ROUTE);
+        if (route != null) {
+            try {
+                return "route:" + route.getClass().getMethod("getId").invoke(route);
+            } catch (ReflectiveOperationException | RuntimeException ignored) {
+                // 모양이 다르면 아래로.
+            }
+        }
+        return "(패턴 없음)";
     }
 
     @Override

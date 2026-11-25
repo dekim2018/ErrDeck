@@ -48,6 +48,7 @@ export function createErrDeck(options: Options) {
 
       if (options.breadcrumbs !== false) watchBreadcrumbs(client, options)
       watchFetch(client, url, options)
+      watchXhr(client, url, options)
       if (client.tracer) {
         const tracer = client.tracer
         tracer.start(location.pathname, 'pageload')
@@ -117,3 +118,43 @@ function watchFetch(client: Client, ingest: string, options: Options) {
     }
   }
 }
+
+/**
+ * axios 처럼 XMLHttpRequest 를 쓰는 화면을 위해 fetch 와 같은 일을 한다(8.3): 빵부스러기, 스팬, traceparent.
+ * open 에서 메서드와 주소를 기억하고, send 직전에 헤더를 붙이고, loadend 에서 스팬을 닫는다.
+ */
+function watchXhr(client: Client, ingest: string, options: Options) {
+  if (typeof XMLHttpRequest === 'undefined') return
+  const crumbs = options.breadcrumbs !== false
+  const ingestBase = ingest.split('?')[0] ?? ingest
+  const proto = XMLHttpRequest.prototype
+  const open = proto.open
+  const send = proto.send
+  const info = new WeakMap<XMLHttpRequest, { method: string; url: string }>()
+  proto.open = function (this: XMLHttpRequest, method: string, url: string | URL, ...rest: unknown[]) {
+    info.set(this, { method: String(method).toUpperCase(), url: String(url) })
+    return (open as (...a: unknown[]) => void).call(this, method, url, ...rest)
+  } as typeof proto.open
+  proto.send = function (this: XMLHttpRequest, body?: Document | XMLHttpRequestBodyInit | null) {
+    const req = info.get(this)
+    if (!req || req.url.startsWith(ingestBase)) return send.call(this, body)
+    const path = req.url.split('?')[0]
+    const span = client.tracer?.startSpan('http.client', `${req.method} ${path}`, req.url)
+    if (span?.header) {
+      try {
+        this.setRequestHeader('traceparent', span.header)
+      } catch {
+        // 이미 보낸 요청이면 붙일 수 없다. 추적만 이어지지 않는다.
+      }
+    }
+    this.addEventListener('loadend', () => {
+      const status = this.status
+      span?.finish(status === 0 ? undefined : status)
+      if (crumbs) {
+        client.addBreadcrumb({ category: 'http', message: `${req.method} ${path}`, data: status === 0 ? { error: 'network' } : { status_code: String(status) } })
+      }
+    })
+    return send.call(this, body)
+  }
+}
+

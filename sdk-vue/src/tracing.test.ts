@@ -116,3 +116,43 @@ describe('가리기', () => {
     expect(text).toContain('/s/REDACTED')
   })
 })
+
+describe('XMLHttpRequest 계측', () => {
+  it('axios 같은 XHR 호출도 스팬으로 남기고 traceparent 를 붙인다', async () => {
+    const sent: Record<string, string>[] = []
+    class FakeXhr {
+      status = 0
+      headers: Record<string, string> = {}
+      listeners: Record<string, (() => void)[]> = {}
+      open(_m: string, _u: string) {}
+      setRequestHeader(k: string, v: string) {
+        this.headers[k] = v
+      }
+      addEventListener(e: string, f: () => void) {
+        ;(this.listeners[e] ??= []).push(f)
+      }
+      send() {
+        sent.push(this.headers)
+        this.status = 200
+        this.listeners.loadend?.forEach((f) => f())
+      }
+    }
+    const g = globalThis as unknown as Record<string, unknown>
+    const before = { XMLHttpRequest: g.XMLHttpRequest, window: g.window, document: g.document, location: g.location, fetch: g.fetch }
+    g.XMLHttpRequest = FakeXhr
+    g.window = { fetch: async () => new Response(null), addEventListener: () => {} }
+    g.document = { addEventListener: () => {}, visibilityState: 'visible' }
+    g.location = { origin: 'http://app', pathname: '/' }
+    try {
+      const { createErrDeck } = await import('./index')
+      const plugin = createErrDeck({ dsn: 'http://k@ingest.local/1', tracesSampleRate: 1, flushIntervalMs: 60_000 })
+      plugin.install({ config: {}, unmount: () => {} } as never)
+      const xhr = new (g.XMLHttpRequest as typeof FakeXhr)()
+      xhr.open('GET', '/api/broadcasts/1')
+      xhr.send()
+      expect(sent[0]?.traceparent).toMatch(/^00-[0-9a-f]{32}-[0-9a-f]{16}-01$/)
+    } finally {
+      Object.assign(g, before)
+    }
+  })
+})
