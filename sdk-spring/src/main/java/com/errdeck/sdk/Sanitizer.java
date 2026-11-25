@@ -14,7 +14,7 @@ final class Sanitizer {
     static final String FILTERED = "[Filtered]";
 
     private static final Set<String> HEADERS = Set.of("authorization", "cookie", "set-cookie", "proxy-authorization");
-    private static final String[] SENSITIVE_PARTS = {"password", "token", "secret", "card", "key"};
+    private static final String[] SENSITIVE_PARTS = {"password", "token", "secret", "card", "key", "ticket"};
 
     private Sanitizer() {
     }

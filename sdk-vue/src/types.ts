@@ -36,6 +36,11 @@ export interface Options extends TracingOptions {
   }
   /** 페이지 이동과 API 호출의 성능 추적(8.3). 기본 true */
   tracing?: boolean
+  /**
+   * 보내기 전에 주소와 문장의 비밀을 가린다(15.6). 공유 링크 토큰처럼 경로에 실린 것을 감시 대상이 직접 정한다.
+   * 이벤트의 주소, 빵부스러기, 트랜잭션 이름, 스팬 설명에 쓴다.
+   */
+  redact?: (text: string) => string
   /** 빵부스러기를 남길지. 기본 true */
   breadcrumbs?: boolean
   maxBreadcrumbs?: number

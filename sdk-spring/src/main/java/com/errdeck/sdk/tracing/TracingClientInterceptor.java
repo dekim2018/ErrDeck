@@ -19,7 +19,7 @@ public class TracingClientInterceptor implements ClientHttpRequestInterceptor {
             return execution.execute(request, body);
         }
         // 주소의 쿼리는 값이 들어 있을 수 있어 뺀다.
-        String description = request.getMethod() + " " + request.getURI().getHost() + request.getURI().getPath();
+        String description = request.getMethod() + " " + request.getURI().getHost() + com.errdeck.sdk.Redaction.apply(request.getURI().getPath());
         ActiveTransaction.OpenSpan span = tx.startSpan("http.client", description);
         request.getHeaders().set(TraceParent.HEADER, tx.traceparent(span.id()));
         try {

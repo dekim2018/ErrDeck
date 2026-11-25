@@ -19,6 +19,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * @param enabled       false 면 SDK 를 끈다. 테스트나 로컬에서 끌 때 쓴다
  * @param inAppPackages 내 코드의 패키지. 지문은 이 패키지의 프레임으로 만든다(6.3)
  * @param tracing       성능 추적(8장)
+ * @param redactPaths   주소의 경로에서 가릴 부분의 정규식(공유 링크 토큰 등). 첫 괄호까지 남기고 가린다
  */
 @ConfigurationProperties("errdeck")
 public record ErrDeckProperties(
@@ -34,7 +35,8 @@ public record ErrDeckProperties(
         Duration shutdownFlush,
         Duration foldWindow,
         Integer foldThreshold,
-        Tracing tracing) {
+        Tracing tracing,
+        List<String> redactPaths) {
 
     /**
      * {@code errdeck.tracing.*}. 값이 없으면 {@link com.errdeck.sdk.tracing.ErrDeckTracer.Options#defaults} 를 쓴다.

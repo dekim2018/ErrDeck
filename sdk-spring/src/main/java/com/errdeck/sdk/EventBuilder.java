@@ -41,7 +41,7 @@ final class EventBuilder {
                 List.of(),
                 Math.max(1, capture.count()),
                 chain(capture.throwable()),
-                request == null ? null : new RequestInfo(request.method(), request.url(), Sanitizer.query(request.queryString()),
+                request == null ? null : new RequestInfo(request.method(), Redaction.apply(request.url()), Sanitizer.query(request.queryString()),
                         Sanitizer.headers(request.headers())),
                 Map.of(),
                 List.of());
@@ -52,7 +52,7 @@ final class EventBuilder {
         List<ExceptionInfo> chain = new ArrayList<>();
         Set<Throwable> seen = Collections.newSetFromMap(new IdentityHashMap<>());
         for (Throwable t = throwable; t != null && chain.size() < MAX_CHAIN && seen.add(t); t = t.getCause()) {
-            chain.add(new ExceptionInfo(t.getClass().getName(), truncate(t.getMessage()), frames(t.getStackTrace())));
+            chain.add(new ExceptionInfo(t.getClass().getName(), truncate(Redaction.apply(t.getMessage())), frames(t.getStackTrace())));
         }
         return chain;
     }
