@@ -744,3 +744,25 @@ WORKFLOW 4장은 시안을 2개 이상 만들어 사용자가 고르게 했지�
 
 - **고른 것**: 프로메테우스에 `copage-app` 수집 대상(`host.docker.internal:8081`), 프로메테우스와 worker 에 `host-gateway` 를 붙이고, 업타임 허용 호스트에 `host.docker.internal` 을 더했다.
 - **감수하는 것**: CoPage 를 띄우지 않으면 `copage-app` 이 up=0 으로 남고 통합 화면에서 장애로 보인다. 쓰지 않을 때는 프로젝트를 지우거나 이 수집 대상을 지운다.
+
+## 28 팬파라이브 로컬 연결
+
+### 28-1. Vue SDK 가 XMLHttpRequest 도 감싼다
+
+- **고른 것**: fetch 와 같은 일(빵부스러기, 스팬, 같은 출처면 traceparent)을 XHR 의 open, send, loadend 에서 한다.
+- **이유**: 팬파라이브 화면은 axios(XHR)를 쓴다. fetch 만 감싸면 API 호출의 스팬과 서버로 이어지는 추적이 빠진다. 번들 gzip 5.0 → 5.4KB.
+
+### 28-2. Spring Cloud Gateway 의 트랜잭션 이름은 라우트 ID
+
+- **고른 것**: 경로 패턴이 없으면 `ServerWebExchangeUtils.gatewayRoute` 속성의 라우트 ID 로 `GET route:broadcast-service` 처럼 짓는다. 클래스에 기대지 않고 속성 이름과 `getId` 로 읽는다.
+- **이유**: gateway 는 핸들러 패턴 대신 라우트를 골라 이름이 모두 `(패턴 없음)` 이었다. 실제 주소는 쓰지 않는다(8.3).
+
+### 28-3. 팬파라이브의 내부 호출은 공통 RestClient.Builder 빈으로(팬파라이브 쪽 변경)
+
+- **고른 것**: 팬파라이브의 내부 API 클라이언트 4개가 `RestClient.builder()` 대신 `common` 의 프로토타입 빌더 빈을 받는다. 외부 호출(토스, MediaMTX)은 그대로.
+- **이유**: SDK 는 빌더 빈에 붙어 traceparent 를 붙인다(18-3). 스프링 부트 4 는 RestClient 자동 설정이 별도 모듈이라 빌더 빈이 없었다. 외부로는 추적 헤더를 보내지 않는다.
+
+### 28-4. 팬파라이브는 관리 포트 없이 서비스 포트에서 긁는다
+
+- **고른 것**: 프로메테우스가 같은 맥의 8080~8084 를 job 이름 = 프로젝트 슬러그로 긁는다. 팬파라이브는 `MANAGEMENT_EXPOSURE=health,prometheus` 일 때만 지표를 연다(기본은 health 그대로).
+- **감수하는 것**: 팬파라이브를 띄우지 않으면 다섯 job 이 up=0 이라 통합 화면에서 팬파라이브가 장애로 보인다. 평소 꺼 두는 서비스라 gateway 모니터도 처음부터 중지해 둔다.

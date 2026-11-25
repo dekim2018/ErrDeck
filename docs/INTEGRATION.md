@@ -15,6 +15,8 @@
 
 자세한 순서는 CoPage 저장소의 README "ErrDeck 으로 모니터링(로컬)" 에 있다.
 
+팬파라이브도 같은 방식이다(28 작업): `scripts/seed/fanpalive-local.sql` 이 서비스별 DSN 을 출력하고, 프로메테우스가 같은 맥의 8080~8084 를 서비스 이름으로 긁는다. 팬파라이브는 `MANAGEMENT_EXPOSURE=health,prometheus` 로 띄운다. 순서는 팬파라이브 저장소의 `docs/ERRDECK.md`.
+
 ## 1. 시스템과 프로젝트 등록
 
 ```bash

@@ -35,6 +35,28 @@ scrape_configs:
     metrics_path: /actuator/prometheus
     static_configs:
       - targets: ["host.docker.internal:8081"]
+  # 같은 맥에서 띄운 팬파라이브 서비스(로컬 연결). 관리 포트가 없어 서비스 포트에서 긁는다.
+  # 팬파라이브를 MANAGEMENT_EXPOSURE=health,prometheus 로 띄워야 열린다.
+  - job_name: gateway
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["host.docker.internal:8080"]
+  - job_name: auth-service
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["host.docker.internal:8081"]
+  - job_name: broadcast-service
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["host.docker.internal:8082"]
+  - job_name: interaction-service
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["host.docker.internal:8083"]
+  - job_name: fandom-service
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["host.docker.internal:8084"]
   - job_name: postgres
     static_configs:
       - targets: ["postgres-exporter:9187"]
