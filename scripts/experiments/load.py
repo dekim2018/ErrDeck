@@ -101,7 +101,7 @@ def exp_sustained():
 
     def load():
         out, _ = r.loadgen("sustained", f"--dsn={DSN}", "--rate=500", f"--duration={minutes}m", "--batch=10",
-                           f"--fingerprints={r.FINGERPRINTS}")
+                           f"--fingerprints={r.FINGERPRINTS}", timeout=minutes * 60 + 600)
         result.update(out)
 
     t = threading.Thread(target=load)
@@ -221,17 +221,16 @@ def exp_interference():
                                "--max-in-flight=200", "--timeout=10s")
             query.update(res)
 
-        ing0, ch0 = r.scrape("ingest"), r.cpu_stat("clickhouse")
+        ch0 = r.cpu_stat("clickhouse")
         q = threading.Thread(target=queries) if qps else None
         if q:
             q.start()
         burst, _ = r.loadgen("burst", f"--dsn={DSN}", "--rate=5000", f"--duration={seconds}s", "--batch=50")
         if q:
             q.join()
-        ing1, ch1 = r.scrape("ingest"), r.cpu_stat("clickhouse")
+        ch1 = r.cpu_stat("clickhouse")
         out[name] = {
             "burst": burst,
-            "ingest_server_p99_s": r.quantile(ing0, ing1, "http_server_requests_seconds", 0.99, uri="/ingest/{projectId}/envelope"),
             "clickhouse_cpu_cores": round((ch1["usage_usec"] - ch0["usage_usec"]) / 1e6 / seconds, 2),
             "query": query or None,
         }
@@ -247,7 +246,8 @@ def host_metrics(port):
     out = {}
     for line in text.splitlines():
         if line.startswith("http_server_requests_seconds_bucket"):
-            m = re.match(r"([a-zA-Z_:][\w:]*)(\{[^}]*\})?\s+(\S+)", line)
+            # uri 라벨 값에 {id} 처럼 중괄호가 들어가므로 마지막 공백 앞까지를 라벨로 본다.
+            m = re.match(r"([a-zA-Z_:][\w:]*)(\{.*\})?\s+(\S+)$", line)
             labels = tuple(sorted(re.findall(r'(\w+)="([^"]*)"', m.group(2) or "")))
             out[(m.group(1), labels)] = float(m.group(3))
     return out

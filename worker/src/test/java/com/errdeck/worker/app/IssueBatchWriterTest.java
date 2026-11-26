@@ -65,17 +65,30 @@ class IssueBatchWriterTest {
     }
 
     @Test
-    void 이미_처리한_event_id_와_묶음_안의_중복은_거르고_처리한_것은_남긴다() {
-        EventRow old = row(1, "a".repeat(32), NOW);
-        seen.ids.add(old.eventId());
+    void 이미_처리한_항목은_거르고_묶음_안의_같은_event_id_는_하나만_남기고_처리한_항목을_남긴다() {
+        ProcessedEntry done = entry("1-0", List.of(row(1, "a".repeat(32), NOW)));
+        seen.refs.add(done.ref());
         EventRow fresh = row(1, "a".repeat(32), NOW);
+        ProcessedEntry first = entry("2-0", List.of(fresh, fresh));
+        ProcessedEntry again = entry("3-0", List.of(fresh));
 
-        writer.prepare(entries(List.of(old, fresh, fresh))).run();
+        writer.prepare(List.of(done, first, again)).run();
 
         assertThat(store.ticks).hasSize(1);
         assertThat(store.events).extracting(EventRow::eventId).containsExactly(fresh.eventId());
-        assertThat(seen.ids).contains(fresh.eventId());
-        assertThat(processed("duplicate")).isEqualTo(2);
+        assertThat(seen.refs).contains(first.ref(), again.ref());
+        assertThat(processed("duplicate")).isEqualTo(3);
+    }
+
+    @Test
+    void 이벤트가_없는_항목은_묻지도_남기지도_않는다() {
+        ProcessedEntry empty = new ProcessedEntry(new EntryRef(QueueStream.EVENTS, "1-0"), NOW, List.of(),
+                List.of(new Quarantine(1, new byte[] {9}, "형식")));
+
+        writer.prepare(List.of(empty)).run();
+
+        assertThat(seen.asked).isZero();
+        assertThat(seen.refs).isEmpty();
     }
 
     @Test
@@ -143,6 +156,10 @@ class IssueBatchWriterTest {
         return registry.get("errdeck.events.processed").tag("outcome", outcome).counter().count();
     }
 
+    private static ProcessedEntry entry(String id, List<EventRow> rows) {
+        return new ProcessedEntry(new EntryRef(QueueStream.EVENTS, id), NOW, rows);
+    }
+
     private static List<ProcessedEntry> entries(List<EventRow> rows) {
         return List.of(new ProcessedEntry(new EntryRef(QueueStream.EVENTS, UUID.randomUUID().toString()), NOW, rows));
     }
@@ -164,19 +181,21 @@ class IssueBatchWriterTest {
                 r.title(), r.culprit());
     }
 
-    private static final class MemorySeen implements SeenEvents {
-        final Set<UUID> ids = new HashSet<>();
+    private static final class MemorySeen implements SeenEntries {
+        final Set<EntryRef> refs = new HashSet<>();
+        int asked;
 
         @Override
-        public Set<UUID> alreadySeen(Collection<UUID> eventIds) {
-            Set<UUID> out = new HashSet<>(eventIds);
-            out.retainAll(ids);
+        public Set<EntryRef> alreadySeen(Collection<EntryRef> entries) {
+            asked++;
+            Set<EntryRef> out = new HashSet<>(entries);
+            out.retainAll(refs);
             return out;
         }
 
         @Override
-        public void markSeen(Collection<UUID> eventIds) {
-            ids.addAll(eventIds);
+        public void markSeen(Collection<EntryRef> entries) {
+            refs.addAll(entries);
         }
     }
 

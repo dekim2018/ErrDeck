@@ -17,7 +17,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * @param maxProcessAttempts   처리에 이만큼 실패하면 격리한다(6.7)
  * @param issueCacheSize       지문과 이슈의 대응을 기억할 개수
  * @param samplesPerIssuePerMinute 이슈별 분당 원본 저장 상한(10.3). 넘는 것은 건수만 남긴다
- * @param seenTtl              처리한 event_id 를 기억하는 시간(10.6)
+ * @param seenTtl              처리한 대기열 항목을 기억하는 시간(10.6). 다시 가져가기(claimMinIdle)보다 넉넉하면 된다
  * @param filesDir             소스맵 볼륨. api 와 같은 경로다(7.2)
  * @param sourcemapCacheSize   해석한 소스맵 캐시의 바이트 상한(7.4)
  */

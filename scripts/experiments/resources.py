@@ -142,8 +142,9 @@ def reset_queue():
             break
 
 
-def loadgen(*args):
-    out = compose("run", "--rm", "-T", "loadgen", *args, timeout=1800)
+def loadgen(*args, timeout=1800):
+    """timeout 은 컨테이너를 띄우는 시간까지 넣어 부하 시간보다 넉넉하게 준다."""
+    out = compose("run", "--rm", "-T", "loadgen", *args, timeout=timeout)
     return parse_loadgen(out), out
 
 
