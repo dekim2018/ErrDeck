@@ -120,7 +120,7 @@ worker는 테이블별로 모았다가 1초가 지났거나 5,000행이 모이�
 | `errdeck:stream:tx` | 스트림 | 트랜잭션 대기열 | 길이 상한 |
 | `errdeck:stream:notify` | 스트림 | 보낼 알림 | 길이 상한 |
 | `errdeck:rl:{projectId}` | 해시 | 토큰 버킷(남은 토큰, 마지막 채운 시각) | 2분 |
-| `errdeck:seen:{eventId}` | 문자열 | 처리한 이벤트 표시 | 1시간 |
+| `errdeck:seen:{대기열}:{항목 ID}` | 문자열 | 처리한 대기열 항목 표시(29 작업에서 이벤트 단위에서 바꿈, 6.7) | 10분 |
 | `errdeck:monitors:due` | 정렬 집합 | 모니터의 다음 실행 시각 | 없음 |
 | `errdeck:refresh:{tokenId}` | 문자열 | 리프레시 토큰 | 14일 |
 
@@ -140,4 +140,4 @@ Redis의 디스크 기록은 1초마다 하는 방식(AOF everysec)으로 둔다
 - **issue_stats_1m 의 열 타입**: `times` 는 `SimpleAggregateFunction(sum, UInt64)`, `users` 는 `AggregateFunction(uniq, UInt64)` 다. 구체화 뷰는 `count` 를 UInt64로 바꿔 더한다. 1년 보존이라 파티션은 월 단위로 둔다.
 - **transactions 의 스팬 열**: 스팬은 같은 행의 배열 열 7개(`span_ids`, `span_parent_ids`, `span_ops`, `span_descriptions`, `span_starts_ms`, `span_durations_ms`, `span_repeats`)로 둔다. 계측을 만드는 18, 19 작업에서 다시 맞춘다.
 - **PostgreSQL 테이블에서 정한 것**: 이슈 상태는 `unresolved`, `resolved`, `ignored`, `regressed`. 무시 조건은 `ignored_until` 과 `ignored_until_count`. 알림 규칙의 기간은 `window` 가 예약어라 `window_minutes` 로 쓴다. 모니터마다 열린 장애 기록은 부분 유일 색인으로 하나만 둔다.
-
+- **처리 표시 키**(29 작업, 사용자 확인): `errdeck:seen:{eventId}` 1시간을 `errdeck:seen:{대기열}:{항목 ID}` 10분으로 바꿨다. 이벤트마다 1시간 남기면 폭주 몇 분 만에 Redis 데이터 상한 256MB를 채웠다. 이유와 감수하는 것은 6.7 끝에 있다.
