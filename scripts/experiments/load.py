@@ -83,9 +83,19 @@ def postgres_stats():
     return dict(zip(keys, map(int, out.split(","))))
 
 
-def issue_count():
+def issue_count(project=r.PROJECT):
     return int(r.sh(["docker", "compose", "exec", "-T", "postgres", "psql", "-U", "errdeck", "-At", "-c",
-                     f"SELECT count(*) FROM issues WHERE project_id = {r.PROJECT}"]).strip())
+                     f"SELECT count(*) FROM issues WHERE project_id = {project}"]).strip())
+
+
+def fresh_project():
+    """한도가 큰 새 프로젝트를 만든다. 이슈는 (프로젝트, 지문)으로 찾으므로 새 프로젝트면 loadgen 의 지문이 모두 처음 보는 것이 된다."""
+    key = f"diversity{int(time.time())}"
+    project = int(r.sh(["docker", "compose", "exec", "-T", "postgres", "psql", "-U", "errdeck", "-At", "-c",
+                        "WITH p AS (INSERT INTO projects (system_id, slug, platform, allowed_origins, rate_limit_per_min) "
+                        f"SELECT id, '{key}', 'spring', '{{}}', 10000000 FROM systems WHERE name = '부하 실험' RETURNING id) "
+                        f"INSERT INTO project_keys (project_id, public_key) SELECT id, '{key}' FROM p RETURNING project_id"]).split()[0])
+    return project, f"http://{key}@ingest:8080/{project}"
 
 
 # ------------------------------------------------------------------ 지속 부하
@@ -148,12 +158,12 @@ def exp_sustained():
 
 # ------------------------------------------------------------------ 지문 다양성
 
-def diversity_run(fingerprints, seconds, cold):
+def diversity_run(fingerprints, seconds, cold, project, dsn):
     """worker 를 다시 띄우면(cold) 지문에서 이슈를 찾는 캐시가 빈다. PostgreSQL 의 CPU 와 문장 수를 시작과 끝에서 읽어 뺀다."""
     if cold:
         r.compose("restart", "worker")
         r.compose("up", "-d", "--wait", "worker")
-    issues0, pg0, cpu0, w0 = issue_count(), postgres_stats(), r.cpu_stat("postgres"), r.scrape("worker")
+    issues0, pg0, cpu0, w0 = issue_count(project), postgres_stats(), r.cpu_stat("postgres"), r.scrape("worker")
     t0 = time.time()
     peak = {"queue": 0}
 
@@ -165,12 +175,12 @@ def diversity_run(fingerprints, seconds, cold):
     stop = threading.Event()
     watcher = threading.Thread(target=watch, args=(stop,), daemon=True)
     watcher.start()
-    out, _ = r.loadgen("sustained", f"--dsn={DSN}", "--rate=500", f"--duration={seconds}s", "--batch=10",
+    out, _ = r.loadgen("sustained", f"--dsn={dsn}", "--rate=500", f"--duration={seconds}s", "--batch=10",
                        f"--fingerprints={fingerprints}")
     wait_drained()
     stop.set()
     wall = time.time() - t0
-    issues1, pg1, cpu1, w1 = issue_count(), postgres_stats(), r.cpu_stat("postgres"), r.scrape("worker")
+    issues1, pg1, cpu1, w1 = issue_count(project), postgres_stats(), r.cpu_stat("postgres"), r.scrape("worker")
     stages = sorted({dict(ls).get("stage") for (n, ls) in w1 if n == "errdeck_worker_stage_seconds_count"} - {None})
     return {
         "fingerprints": fingerprints,
@@ -189,12 +199,13 @@ def exp_diversity():
     seconds = arg("seconds", 180)
     start_stack()
     out = {}
-    r.log("준비: 지문 1,000종으로 이슈를 만들어 둔다")
-    diversity_run(1_000, 60, cold=False)
+    project, dsn = fresh_project()
+    r.log(f"새 프로젝트 {project}. 준비: 지문 1,000종으로 이슈를 만들어 둔다")
+    diversity_run(1_000, 60, False, project, dsn)
     for name, fps, cold in [("1,000종, 빈 캐시", 1_000, True), ("10,000종, 빈 캐시(새 이슈 9,000개)", 10_000, True),
                             ("10,000종, 찬 캐시", 10_000, False)]:
         r.log(name)
-        out[name] = diversity_run(fps, seconds, cold)
+        out[name] = diversity_run(fps, seconds, cold, project, dsn)
         r.log(json.dumps(out[name], ensure_ascii=False))
     return out
 
