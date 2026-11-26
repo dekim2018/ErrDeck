@@ -39,8 +39,9 @@ OVERRIDE = RUN / "override.yml"
 
 PROJECT = 3
 KEY = "loadgenhigh3"
-STACK_CPUS = "0-3"
-LOADGEN_CPUS = "4-9"
+# 코어 10개 맥(로컬-2)의 값이 기본이다. 도커 가상 머신의 코어가 적으면 환경 변수로 바꾼다(로컬-3 은 둘 다 0-3).
+STACK_CPUS = os.environ.get("ERRDECK_STACK_CPUS", "0-3")
+LOADGEN_CPUS = os.environ.get("ERRDECK_LOADGEN_CPUS", "4-9")
 REDIS = ("127.0.0.1", int(os.environ.get("ERRDECK_REDIS_PORT", "16379")))
 API = f"http://localhost:{os.environ.get('ERRDECK_API_HOST_PORT', '18081')}"
 
