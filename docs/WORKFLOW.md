@@ -609,7 +609,7 @@ sleep 20 && curl -s http://localhost:8080/actuator/health; kill %1
 - [x] 20 업타임 점검
 - [x] 21 알림
 - [x] 22 통합 화면
-- [ ] 23 팬파라이브와 CoPage 연결 (이 저장소 쪽 준비 완료: INTEGRATION.md, 에이전트, 초기 데이터. 두 저장소 수정은 사용자 확인 뒤)
+- [x] 23 팬파라이브와 CoPage 연결 (로컬에서 확인: CoPage #38, 팬파라이브 #40. 서버 연결은 25 뒤)
 - [x] 24 장애 실험
 - [ ] 25 오라클 서버 배포 (설정과 절차 준비 완료: docker-compose.oci.yml, Caddy, DEPLOY-OCI.md. 서버 작업은 사용자가)
 - [ ] 26 선택 과제: 로컬 쿠버네티스 (하지 않음, CHOICES 26-1)
