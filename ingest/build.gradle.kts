@@ -11,6 +11,8 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-actuator")
     implementation("org.springframework.boot:spring-boot-starter-jdbc")
     implementation("org.springframework.boot:spring-boot-starter-data-redis")
+    // Lettuce 의 DNS 캐시 TTL 을 줄이려고 직접 쓴다(RedisClientConfig). 버전은 Spring Boot 가 관리한다.
+    implementation("io.netty:netty-resolver-dns")
     implementation("com.github.ben-manes.caffeine:caffeine")
     runtimeOnly("org.postgresql:postgresql")
     runtimeOnly("io.micrometer:micrometer-registry-prometheus")

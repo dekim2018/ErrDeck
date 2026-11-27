@@ -766,3 +766,13 @@ WORKFLOW 4장은 시안을 2개 이상 만들어 사용자가 고르게 했지�
 
 - **고른 것**: 프로메테우스가 같은 맥의 8080~8084 를 job 이름 = 프로젝트 슬러그로 긁는다. 팬파라이브는 `MANAGEMENT_EXPOSURE=health,prometheus` 일 때만 지표를 연다(기본은 health 그대로).
 - **감수하는 것**: 팬파라이브를 띄우지 않으면 다섯 job 이 up=0 이라 통합 화면에서 팬파라이브가 장애로 보인다. 평소 꺼 두는 서비스라 gateway 모니터도 처음부터 중지해 둔다.
+
+## 30 Redis 재연결
+
+### 30-1. Lettuce 의 DNS 캐시는 최대 5초, 재연결 간격은 최대 2초
+
+- **고른 것**: `ClientResourcesBuilderCustomizer` 로 netty DNS 해석기의 캐시를 `DefaultDnsCache(0, 5, 1)` 로 바꾸고, 재연결 간격을 0.1초에서 두 배씩 최대 2초로 둔다. ingest, worker, api 에 같은 설정 클래스(`RedisClientConfig`)를 하나씩 둔다.
+- **다른 선택지**: (가) netty DNS 대신 JVM 해석기(`DefaultAddressResolverGroup`)를 쓰기. JVM 의 캐시는 30초이고, 이름 풀기가 이벤트 루프를 막는다. (나) 연결 실패가 이어지면 연결 팩토리를 다시 만들기. 원인(DNS 캐시)을 그대로 두고 증상만 다룬다. (다) TCP 사용자 제한 시간으로 죽은 연결을 빨리 끊기. epoll 전송이 필요해 하지 않았다. 이번 원인과도 다르다.
+- **이유**: 컨테이너 안의 이름 풀기는 이미 새 주소를 주는데 Lettuce 만 600초 동안 옛 주소를 썼다. 캐시를 짧게 하는 것이 원인을 바로 고친다. 이름 풀기는 재연결 때만 하므로 5초로 줄여도 부담이 없다.
+- **바꾸려면**: 각 모듈의 `application.yml` 의 `errdeck.redis` 와 `config/RedisClientConfig`. 셋이 함께 쓰는 스프링 모듈을 만들면 하나로 모은다.
+
