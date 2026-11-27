@@ -158,6 +158,8 @@ JVM 컨테이너의 힙을 상한의 절반 안팎으로 잡은 이유는 힙 �
 | 업타임 점검 | 5초 | 실패로 기록 |
 | 알림 웹훅 | 5초 | 재시도 3회 |
 
+Redis 가 다른 주소로 다시 뜨는 경우(30 작업): ingest, worker, api 의 Lettuce 는 이름 풀기 결과를 최대 5초만 기억하고, 끊긴 연결을 최대 2초 간격으로 다시 잇는다(`errdeck.redis.dns-max-ttl`, `errdeck.redis.reconnect-max-delay`). 기본값으로는 netty 의 DNS 캐시가 도커 내장 DNS 의 TTL 600초를 따라 Redis 컨테이너를 새로 만들면 최대 10분 동안 옛 주소로만 다시 연결했고, 재연결 간격도 최대 30초였다. 고친 뒤 부하 중에 Redis 를 새 주소로 다시 만들었을 때 ingest 의 503 은 Redis 가 멈춰 있던 몇 초뿐이었다(EXPERIMENTS 18.4).
+
 ## 14.10 버린 대안
 
 | 대안 | 버린 이유 |

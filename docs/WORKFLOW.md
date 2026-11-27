@@ -177,6 +177,7 @@ PR 주소, 확인한 것, 확인하지 못한 것, 사용자가 정해야 할 �
 | 로컬 캐시 | `com.github.ben-manes.caffeine:caffeine`. Spring Boot가 버전을 관리한다 |
 | 지표 | `io.micrometer:micrometer-registry-prometheus`. Spring Boot가 버전을 관리한다 |
 | 테스트의 스키마 적용 | `org.flywaydb:flyway-core`, `org.flywaydb:flyway-database-postgresql`. ingest 테스트가 api의 Flyway 스크립트를 적용할 때 쓴다 |
+| Redis 이름 풀기 | `io.netty:netty-resolver-dns`. Spring Boot가 버전을 관리한다. Lettuce 의 DNS 캐시 TTL 을 줄이려고 ingest, worker, api 가 직접 쓴다(30 작업) |
 
 위 표에 없는 의존성(ClickHouse 클라이언트, Caffeine, 프로메테우스 등록기 등)은 처음 쓰는 작업에서 Spring Boot가 버전을 관리하는지 확인하고, 관리하지 않으면 버전을 명시한다. 추가한 의존성은 이 표에 한 줄 더한다.
 
