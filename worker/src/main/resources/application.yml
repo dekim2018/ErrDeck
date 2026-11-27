@@ -42,6 +42,10 @@ management:
 
 # 값은 14.3, 14.5, 10.4, 14.9 를 따른다. 17 작업의 자원 실험으로 다시 맞춘다.
 errdeck:
+  # Redis 가 다른 주소로 다시 떠도 따라가게 한다(14.9 끝). 도커 내장 DNS 의 TTL 은 600초다.
+  redis:
+    dns-max-ttl: 5s
+    reconnect-max-delay: 2s
   worker:
     consumer-group: errdeck-workers
     read-count: 500

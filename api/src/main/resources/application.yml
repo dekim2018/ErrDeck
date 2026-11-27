@@ -39,6 +39,10 @@ management:
         http.server.requests: true
 
 errdeck:
+  # Redis 가 다른 주소로 다시 떠도 따라가게 한다(14.9 끝). 도커 내장 DNS 의 TTL 은 600초다.
+  redis:
+    dns-max-ttl: 5s
+    reconnect-max-delay: 2s
   clickhouse:
     url: http://${ERRDECK_CLICKHOUSE_HOST:localhost}:${ERRDECK_CLICKHOUSE_PORT:18123}
     database: errdeck

@@ -48,6 +48,10 @@ management:
 
 # 값은 5.3, 5.4, 5.5, 14.4 를 따른다. 18장의 실험 결과로 다시 맞춘다.
 errdeck:
+  # Redis 가 다른 주소로 다시 떠도 따라가게 한다(14.9 끝). 도커 내장 DNS 의 TTL 은 600초다.
+  redis:
+    dns-max-ttl: 5s
+    reconnect-max-delay: 2s
   ingest:
     max-envelope-size: 200KB
     key-cache:
