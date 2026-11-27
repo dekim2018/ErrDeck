@@ -83,7 +83,9 @@ class WorkerFlowTest extends TestInfra {
     }
 
     @Test
-    void 같은_봉투가_두_번_오면_두_번째는_중복으로_거른다() {
+    void 같은_봉투가_새_항목으로_두_번_오면_둘_다_센다() {
+        // 중복 확인은 대기열 항목 단위다(6.7). 같은 항목을 다시 가져간 경우만 거르고, SDK 는 실패한 봉투를 다시 보내지 않는다.
+        // 항목을 다시 가져가는 경우는 IssueBatchWriterTest 와 RedisSeenEntriesTest 가 본다.
         long projectId = createProject(jdbc);
         byte[] envelope = sameError(5);
 
@@ -96,8 +98,7 @@ class WorkerFlowTest extends TestInfra {
         }
         await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> assertThat(length("errdeck:stream:events")).isZero());
 
-        assertThat(counted(projectId)).isEqualTo(5);
-        assertThat(stored(projectId)).isEqualTo(5);
+        await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> assertThat(counted(projectId)).isEqualTo(10));
     }
 
     @Test

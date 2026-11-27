@@ -63,7 +63,8 @@ errdeck:
     issue-cache-size: 50000
     # 이슈별 분당 원본 저장 상한(10.3). 넘는 것은 건수만 남긴다.
     samples-per-issue-per-minute: 100
-    seen-ttl: 1h
+    # 처리한 대기열 항목을 기억하는 시간(10.6, 6.7). 다시 가져가기(claim-min-idle 60초)와 그 뒤 재시도를 덮는다.
+    seen-ttl: 10m
     # 소스맵 볼륨. api 의 errdeck.files.dir 과 같은 경로다(7.2).
     files-dir: ${ERRDECK_FILES_DIR:./data/artifacts}
     # 해석한 소스맵 캐시. 힙 448MB 중 128MB(14.7).

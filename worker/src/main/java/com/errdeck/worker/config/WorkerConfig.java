@@ -14,7 +14,7 @@ import com.errdeck.worker.in.scheduler.PipelineLifecycle;
 import com.errdeck.worker.app.IssueBatchWriter;
 import com.errdeck.worker.out.clickhouse.ClickHouseEventStore;
 import com.errdeck.worker.out.persistence.JdbcIssueRepository;
-import com.errdeck.worker.out.redis.RedisSeenEvents;
+import com.errdeck.worker.out.redis.RedisSeenEntries;
 import com.errdeck.worker.out.redis.RedisQueueSource;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
@@ -51,7 +51,7 @@ public class WorkerConfig {
     IssueBatchWriter batchWriter(StringRedisTemplate redis, JdbcClient jdbc, JdbcTemplate template, TransactionTemplate transactions,
                                  ClickHouseEventStore store, WorkerProperties properties, WorkerMetrics metrics, Clock clock) {
         return new IssueBatchWriter(
-                new RedisSeenEvents(redis, properties.seenTtl()),
+                new RedisSeenEntries(redis, properties.seenTtl()),
                 new JdbcIssueRepository(jdbc, template, transactions),
                 store,
                 metrics, clock, properties.issueCacheSize(), properties.samplesPerIssuePerMinute());

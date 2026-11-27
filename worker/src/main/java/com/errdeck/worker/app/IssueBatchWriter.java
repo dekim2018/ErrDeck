@@ -1,6 +1,7 @@
 package com.errdeck.worker.app;
 
 import com.errdeck.worker.app.WorkerMetrics.Outcome;
+import com.errdeck.worker.domain.EntryRef;
 import com.errdeck.worker.domain.EventRow;
 import com.errdeck.worker.domain.IssueKey;
 import com.errdeck.worker.domain.IssueSeen;
@@ -25,11 +26,11 @@ import java.util.UUID;
  * 쓰기 단계(6.1의 4, 7, 8, 9번과 10번의 확인 처리 앞까지).
  *
  * <ol>
- *   <li>이미 처리한 event_id 를 거른다(Redis).</li>
+ *   <li>이미 처리한 대기열 항목을 거르고(Redis), 묶음 안에서 두 번 온 event_id 를 거른다.</li>
  *   <li>묶음 안의 처음 보는 지문을 모아 이슈를 한 번에 찾고, 없으면 만든다(PostgreSQL).</li>
  *   <li>이슈별 분당 상한 안의 것만 원본으로 고른다.</li>
  *   <li>원본을 {@code events} 에, 받은 것 전부의 건수를 {@code event_ticks} 에 쓴다(ClickHouse).</li>
- *   <li>처리한 event_id 를 남기고, 이슈의 최근 발생을 이슈당 한 번 고치고, 격리할 원문을 옮긴다.</li>
+ *   <li>처리한 항목을 남기고, 이슈의 최근 발생을 이슈당 한 번 고치고, 격리할 원문을 옮긴다.</li>
  * </ol>
  *
  * <p>중간에 실패하면 단계 구조가 같은 쓰기를 다시 부른다. 끝난 단계는 건너뛰어, 이미 쓴 건수를 두 번 더하지 않고
@@ -37,7 +38,7 @@ import java.util.UUID;
  */
 public class IssueBatchWriter implements BatchWriter {
 
-    private final SeenEvents seenEvents;
+    private final SeenEntries seenEntries;
     private final IssueRepository issues;
     private final EventStore store;
     private final WorkerMetrics metrics;
@@ -45,9 +46,9 @@ public class IssueBatchWriter implements BatchWriter {
     private final IssueCache cache;
     private final SampleLimiter limiter;
 
-    public IssueBatchWriter(SeenEvents seenEvents, IssueRepository issues, EventStore store, WorkerMetrics metrics, Clock clock,
+    public IssueBatchWriter(SeenEntries seenEntries, IssueRepository issues, EventStore store, WorkerMetrics metrics, Clock clock,
                             int issueCacheSize, int samplesPerIssuePerMinute) {
-        this.seenEvents = seenEvents;
+        this.seenEntries = seenEntries;
         this.issues = issues;
         this.store = store;
         this.metrics = metrics;
@@ -63,11 +64,13 @@ public class IssueBatchWriter implements BatchWriter {
 
     private final class Write implements BatchWrite {
 
+        private final List<ProcessedEntry> entries;
         private final List<EventRow> rows = new ArrayList<>();
         private final List<Quarantine> quarantined = new ArrayList<>();
         private final List<TransactionRow> transactions = new ArrayList<>();
 
         private List<EventRow> fresh;
+        private List<EntryRef> freshEntries;
         private int duplicates;
         private Map<IssueKey, Long> issueIds;
         private List<EventRow> sampled;
@@ -80,6 +83,7 @@ public class IssueBatchWriter implements BatchWriter {
         private boolean quarantineWritten;
 
         Write(List<ProcessedEntry> batch) {
+            entries = batch;
             batch.forEach(entry -> {
                 rows.addAll(entry.rows());
                 quarantined.addAll(entry.quarantined());
@@ -90,7 +94,7 @@ public class IssueBatchWriter implements BatchWriter {
         @Override
         public void run() {
             if (fresh == null) {
-                fresh = dropDuplicates(rows);
+                fresh = dropDuplicates();
                 duplicates = rows.size() - fresh.size();
             }
             if (issueIds == null) {
@@ -120,7 +124,7 @@ public class IssueBatchWriter implements BatchWriter {
                 transactionsWritten = true;
             }
             if (!seenMarked) {
-                seenEvents.markSeen(fresh.stream().map(EventRow::eventId).toList());
+                seenEntries.markSeen(freshEntries);
                 seenMarked = true;
             }
             if (!touched) {
@@ -137,16 +141,25 @@ public class IssueBatchWriter implements BatchWriter {
             }
         }
 
-        /** 이미 처리한 것과, 같은 묶음 안에서 두 번 온 것을 뺀다. */
-        private List<EventRow> dropDuplicates(List<EventRow> all) {
-            if (all.isEmpty()) {
+        /** 이미 처리한 항목의 이벤트와, 같은 묶음 안에서 두 번 온 event_id 를 뺀다. 이벤트가 있는 항목만 Redis 에 묻는다. */
+        private List<EventRow> dropDuplicates() {
+            List<EntryRef> withRows = entries.stream().filter(e -> !e.rows().isEmpty()).map(ProcessedEntry::ref).toList();
+            if (withRows.isEmpty()) {
+                freshEntries = List.of();
                 return List.of();
             }
-            Set<UUID> seen = new HashSet<>(seenEvents.alreadySeen(all.stream().map(EventRow::eventId).toList()));
-            List<EventRow> kept = new ArrayList<>(all.size());
-            for (EventRow row : all) {
-                if (seen.add(row.eventId())) {
-                    kept.add(row);
+            Set<EntryRef> done = seenEntries.alreadySeen(withRows);
+            freshEntries = withRows.stream().filter(ref -> !done.contains(ref)).toList();
+            Set<UUID> ids = new HashSet<>();
+            List<EventRow> kept = new ArrayList<>(rows.size());
+            for (ProcessedEntry entry : entries) {
+                if (done.contains(entry.ref())) {
+                    continue;
+                }
+                for (EventRow row : entry.rows()) {
+                    if (ids.add(row.eventId())) {
+                        kept.add(row);
+                    }
                 }
             }
             return kept;
